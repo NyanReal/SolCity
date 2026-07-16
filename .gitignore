@@ -1,0 +1,12 @@
+# Unreal Engine generated files
+Binaries/
+DerivedDataCache/
+Intermediate/
+Saved/
+.vs/
+*.VC.db
+*.sln
+__pycache__/
+*.pyc
+
+# Keep imported .uasset materials/textures when deliberately checked in.
