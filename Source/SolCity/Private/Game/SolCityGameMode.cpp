@@ -34,6 +34,18 @@ void ASolCityGameMode::StartPlay()
     // seconds avoids capturing the default material while new shaders stream.
     if (FParse::Param(FCommandLine::Get(), TEXT("SolCityCapture")) && GetWorld())
     {
+        float CaptureZoom = 0.0f;
+        if (FParse::Value(FCommandLine::Get(), TEXT("SolCityCaptureZoom="), CaptureZoom))
+        {
+            if (APlayerController* PC = GetWorld()->GetFirstPlayerController())
+            {
+                if (ACityCameraPawn* CameraPawn = Cast<ACityCameraPawn>(PC->GetPawn()))
+                {
+                    CameraPawn->SetZoomDistance(CaptureZoom, true);
+                }
+            }
+        }
+
         GetWorldTimerManager().SetTimer(CaptureTimer, this,
             &ASolCityGameMode::CaptureValidationFrame, 5.0f, false);
         GetWorldTimerManager().SetTimer(ExitTimer, this,

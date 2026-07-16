@@ -1,5 +1,5 @@
 {
-  "version": 3,
+  "version": 4,
   "style": "peaceful Japanese animation background, vivid clean pastel colors, warm clear daylight",
   "assets": [
     {
@@ -113,6 +113,7 @@
       "material_name": "M_FacadeCafe_Anime",
       "tiling": 1.0,
       "animated": false,
+      "unlit": true,
       "queue": false
     },
     {
@@ -122,6 +123,7 @@
       "material_name": "M_FacadeApartment_Anime",
       "tiling": 1.0,
       "animated": false,
+      "unlit": true,
       "queue": false
     },
     {
@@ -129,6 +131,25 @@
       "source": "Content/Generated/SourceTextures/T_FacadeTownhouse_Anime.png",
       "texture_name": "T_FacadeTownhouse_Anime",
       "material_name": "M_FacadeTownhouse_Anime",
+      "tiling": 1.0,
+      "animated": false,
+      "unlit": true,
+      "queue": false
+    },
+    {
+      "id": "DIRECT-017",
+      "source": "Content/Generated/SourceTextures/T_RoofMetal_Anime.png",
+      "texture_name": "T_RoofMetal_Anime",
+      "material_name": "M_RoofMetal_Anime",
+      "tiling": 3.0,
+      "animated": false,
+      "queue": false
+    },
+    {
+      "id": "DIRECT-018",
+      "source": "Content/Generated/SourceTextures/T_RoofGarden_Anime.png",
+      "texture_name": "T_RoofGarden_Anime",
+      "material_name": "M_RoofGarden_Anime",
       "tiling": 1.0,
       "animated": false,
       "queue": false

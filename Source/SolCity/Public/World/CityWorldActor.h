@@ -226,6 +226,12 @@ private:
 	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> Roofs;
 
 	UPROPERTY(VisibleAnywhere, Category = "Sol City|Components")
+	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> RoofsMetal;
+
+	UPROPERTY(VisibleAnywhere, Category = "Sol City|Components")
+	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> RoofsGarden;
+
+	UPROPERTY(VisibleAnywhere, Category = "Sol City|Components")
 	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> Windows;
 
 	UPROPERTY(VisibleAnywhere, Category = "Sol City|Components")

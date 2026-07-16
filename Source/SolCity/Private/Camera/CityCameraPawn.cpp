@@ -118,6 +118,15 @@ void ACityCameraPawn::ZoomCamera(const float Value)
     }
 }
 
+void ACityCameraPawn::SetZoomDistance(const float NewZoomDistance, const bool bImmediate)
+{
+    TargetZoom = FMath::Clamp(NewZoomDistance, MinZoom, MaxZoom);
+    if (bImmediate && SpringArm)
+    {
+        SpringArm->TargetArmLength = TargetZoom;
+    }
+}
+
 void ACityCameraPawn::ResetCamera()
 {
     SetActorLocation(FVector(-1500.0f, 0.0f, 0.0f));

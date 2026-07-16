@@ -19,6 +19,10 @@ public:
     virtual void Tick(float DeltaSeconds) override;
     virtual void SetupPlayerInputComponent(UInputComponent* PlayerInputComponent) override;
 
+    /** Sets the wheel-zoom target; useful for Blueprint views and render validation. */
+    UFUNCTION(BlueprintCallable, Category="Sol City|Camera")
+    void SetZoomDistance(float NewZoomDistance, bool bImmediate = false);
+
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Sol City|Camera")
     float MinZoom = 1400.0f;
 

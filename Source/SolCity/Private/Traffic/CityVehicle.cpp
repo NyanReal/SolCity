@@ -132,41 +132,42 @@ ACityVehicle::ACityVehicle()
 		}
 	}
 
-	// A calm three-box compact car: low chassis, long passenger body, distinct
-	// hood/trunk, a tall glasshouse and a painted roof. The visual nose remains
-	// close to VehicleHalfLength so stopping and following behavior is unchanged.
-	Chassis->SetRelativeLocation(FVector(0.0f, 0.0f, 43.0f));
-	Chassis->SetRelativeScale3D(FVector(1.74f, 0.69f, 0.16f));
-	Body->SetRelativeLocation(FVector(0.0f, 0.0f, 68.0f));
-	Body->SetRelativeScale3D(FVector(1.62f, 0.75f, 0.36f));
-	Hood->SetRelativeLocation(FVector(106.0f, 0.0f, 91.0f));
-	Hood->SetRelativeScale3D(FVector(0.54f, 0.70f, 0.17f));
-	Trunk->SetRelativeLocation(FVector(-121.0f, 0.0f, 89.0f));
-	Trunk->SetRelativeScale3D(FVector(0.38f, 0.70f, 0.18f));
-	Cabin->SetRelativeLocation(FVector(-18.0f, 0.0f, 122.0f));
-	Cabin->SetRelativeScale3D(FVector(0.74f, 0.61f, 0.34f));
-	Roof->SetRelativeLocation(FVector(-20.0f, 0.0f, 158.0f));
-	Roof->SetRelativeScale3D(FVector(0.61f, 0.65f, 0.11f));
-	FrontBumper->SetRelativeLocation(FVector(174.0f, 0.0f, 59.0f));
-	FrontBumper->SetRelativeScale3D(FVector(0.08f, 0.73f, 0.14f));
-	RearBumper->SetRelativeLocation(FVector(-174.0f, 0.0f, 59.0f));
-	RearBumper->SetRelativeScale3D(FVector(0.08f, 0.73f, 0.14f));
+	// Engine cubes are 100uu wide, so these scales describe a conventional
+	// 3.3 m x 1.5 m compact sedan rather than a narrow open-wheel racer.
+	// The visual nose remains close to VehicleHalfLength so traffic spacing is
+	// unchanged while the wheels tuck naturally beneath the body sides.
+	Chassis->SetRelativeLocation(FVector(0.0f, 0.0f, 38.0f));
+	Chassis->SetRelativeScale3D(FVector(3.30f, 1.38f, 0.18f));
+	Body->SetRelativeLocation(FVector(0.0f, 0.0f, 61.0f));
+	Body->SetRelativeScale3D(FVector(3.16f, 1.48f, 0.40f));
+	Hood->SetRelativeLocation(FVector(105.0f, 0.0f, 84.0f));
+	Hood->SetRelativeScale3D(FVector(1.08f, 1.38f, 0.27f));
+	Trunk->SetRelativeLocation(FVector(-119.0f, 0.0f, 84.0f));
+	Trunk->SetRelativeScale3D(FVector(0.68f, 1.38f, 0.29f));
+	Cabin->SetRelativeLocation(FVector(-15.0f, 0.0f, 108.0f));
+	Cabin->SetRelativeScale3D(FVector(1.48f, 1.16f, 0.63f));
+	Roof->SetRelativeLocation(FVector(-18.0f, 0.0f, 143.0f));
+	Roof->SetRelativeScale3D(FVector(1.28f, 1.22f, 0.12f));
+	FrontBumper->SetRelativeLocation(FVector(166.0f, 0.0f, 52.0f));
+	FrontBumper->SetRelativeScale3D(FVector(0.14f, 1.48f, 0.17f));
+	RearBumper->SetRelativeLocation(FVector(-166.0f, 0.0f, 52.0f));
+	RearBumper->SetRelativeScale3D(FVector(0.14f, 1.48f, 0.17f));
 
-	HeadlightLeft->SetRelativeLocation(FVector(178.5f, -45.0f, 80.0f));
-	HeadlightRight->SetRelativeLocation(FVector(178.5f, 45.0f, 80.0f));
-	HeadlightLeft->SetRelativeScale3D(FVector(0.035f, 0.20f, 0.105f));
-	HeadlightRight->SetRelativeScale3D(FVector(0.035f, 0.20f, 0.105f));
-	TailLightLeft->SetRelativeLocation(FVector(-178.5f, -47.0f, 79.0f));
-	TailLightRight->SetRelativeLocation(FVector(-178.5f, 47.0f, 79.0f));
-	TailLightLeft->SetRelativeScale3D(FVector(0.035f, 0.18f, 0.105f));
-	TailLightRight->SetRelativeScale3D(FVector(0.035f, 0.18f, 0.105f));
+	HeadlightLeft->SetRelativeLocation(FVector(174.0f, -46.0f, 73.0f));
+	HeadlightRight->SetRelativeLocation(FVector(174.0f, 46.0f, 73.0f));
+	HeadlightLeft->SetRelativeScale3D(FVector(0.035f, 0.28f, 0.12f));
+	HeadlightRight->SetRelativeScale3D(FVector(0.035f, 0.28f, 0.12f));
+	TailLightLeft->SetRelativeLocation(FVector(-174.0f, -48.0f, 72.0f));
+	TailLightRight->SetRelativeLocation(FVector(-174.0f, 48.0f, 72.0f));
+	TailLightLeft->SetRelativeScale3D(FVector(0.035f, 0.25f, 0.12f));
+	TailLightRight->SetRelativeScale3D(FVector(0.035f, 0.25f, 0.12f));
 
 	const FRotator WheelRotation(0.0f, 0.0f, 90.0f);
-	const FVector WheelScale(0.56f, 0.56f, 0.22f);
-	WheelFrontLeft->SetRelativeLocation(FVector(111.0f, -75.0f, 40.0f));
-	WheelFrontRight->SetRelativeLocation(FVector(111.0f, 75.0f, 40.0f));
-	WheelRearLeft->SetRelativeLocation(FVector(-111.0f, -75.0f, 40.0f));
-	WheelRearRight->SetRelativeLocation(FVector(-111.0f, 75.0f, 40.0f));
+	const FVector WheelScale(0.52f, 0.52f, 0.18f);
+	WheelFrontLeft->SetRelativeLocation(FVector(106.0f, -69.0f, 34.0f));
+	WheelFrontRight->SetRelativeLocation(FVector(106.0f, 69.0f, 34.0f));
+	WheelRearLeft->SetRelativeLocation(FVector(-106.0f, -69.0f, 34.0f));
+	WheelRearRight->SetRelativeLocation(FVector(-106.0f, 69.0f, 34.0f));
 	for (UStaticMeshComponent* Wheel : {
 		WheelFrontLeft.Get(), WheelFrontRight.Get(), WheelRearLeft.Get(), WheelRearRight.Get() })
 	{
@@ -174,11 +175,11 @@ ACityVehicle::ACityVehicle()
 		Wheel->SetRelativeScale3D(WheelScale);
 	}
 
-	const FVector WheelCapScale(0.34f, 0.34f, 0.055f);
-	WheelCapFrontLeft->SetRelativeLocation(FVector(111.0f, -87.5f, 40.0f));
-	WheelCapFrontRight->SetRelativeLocation(FVector(111.0f, 87.5f, 40.0f));
-	WheelCapRearLeft->SetRelativeLocation(FVector(-111.0f, -87.5f, 40.0f));
-	WheelCapRearRight->SetRelativeLocation(FVector(-111.0f, 87.5f, 40.0f));
+	const FVector WheelCapScale(0.31f, 0.31f, 0.045f);
+	WheelCapFrontLeft->SetRelativeLocation(FVector(106.0f, -79.0f, 34.0f));
+	WheelCapFrontRight->SetRelativeLocation(FVector(106.0f, 79.0f, 34.0f));
+	WheelCapRearLeft->SetRelativeLocation(FVector(-106.0f, -79.0f, 34.0f));
+	WheelCapRearRight->SetRelativeLocation(FVector(-106.0f, 79.0f, 34.0f));
 	for (UStaticMeshComponent* WheelCap : {
 		WheelCapFrontLeft.Get(), WheelCapFrontRight.Get(), WheelCapRearLeft.Get(), WheelCapRearRight.Get() })
 	{

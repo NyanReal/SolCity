@@ -82,6 +82,8 @@ ACityWorldActor::ACityWorldActor()
 	BuildingApartment = CreateHISM(TEXT("BuildingApartment"), true, true);
 	BuildingTownhouse = CreateHISM(TEXT("BuildingTownhouse"), true, true);
 	Roofs = CreateHISM(TEXT("Roofs"), false, false);
+	RoofsMetal = CreateHISM(TEXT("RoofsMetal"), false, false);
+	RoofsGarden = CreateHISM(TEXT("RoofsGarden"), false, false);
 	Windows = CreateHISM(TEXT("Windows"), false, false);
 	TreeTrunks = CreateHISM(TEXT("TreeTrunks"), true, true);
 	TreeCrowns = CreateHISM(TEXT("TreeCrowns"), false, false);
@@ -117,6 +119,8 @@ ACityWorldActor::ACityWorldActor()
 	BuildingApartment->SetStaticMesh(CubeMesh);
 	BuildingTownhouse->SetStaticMesh(CubeMesh);
 	Roofs->SetStaticMesh(CubeMesh);
+	RoofsMetal->SetStaticMesh(CubeMesh);
+	RoofsGarden->SetStaticMesh(CubeMesh);
 	Windows->SetStaticMesh(CubeMesh);
 	TreeTrunks->SetStaticMesh(CylinderMesh);
 	TreeCrowns->SetStaticMesh(CylinderMesh);
@@ -238,8 +242,10 @@ void ACityWorldActor::EnsureDaylightActors()
 		{
 			USkyLightComponent* Light = SkyLight->GetLightComponent();
 			Light->SetMobility(EComponentMobility::Movable);
-			Light->SetIntensity(0.85f);
-			Light->SetLightColor(FLinearColor(0.69f, 0.82f, 1.0f));
+			// Lift north-facing facades so the authored anime textures remain
+			// legible while the directional sun still supplies crisp soft shadows.
+			Light->SetIntensity(1.55f);
+			Light->SetLightColor(FLinearColor(0.78f, 0.87f, 1.0f));
 			Light->SetRealTimeCaptureEnabled(true);
 		}
 	}
@@ -282,7 +288,7 @@ void ACityWorldActor::ClearInstances()
 		GroundTiles, ParkTiles, ParkPaths, RiverTiles, Roads, Sidewalks, RoadMarkings,
 		Bridges, BridgePillars, BuildingPeach, BuildingYellow, BuildingMint,
 		BuildingBlue, BuildingCafe, BuildingApartment, BuildingTownhouse,
-		Roofs, Windows, TreeTrunks, TreeCrowns
+		Roofs, RoofsMetal, RoofsGarden, Windows, TreeTrunks, TreeCrowns
 	};
 
 	for (UHierarchicalInstancedStaticMeshComponent* Component : Components)
@@ -376,6 +382,12 @@ void ACityWorldActor::ConfigureMaterials()
 	Roofs->SetMaterial(0, GeneratedOrFallback(
 		TEXT("/Game/Generated/Materials/M_RoofTile_Anime.M_RoofTile_Anime"),
 		MakeColourMaterial(SolCityWorld::RoofColour, TEXT("MI_Roof_Runtime"))));
+	RoofsMetal->SetMaterial(0, GeneratedOrFallback(
+		TEXT("/Game/Generated/Materials/M_RoofMetal_Anime.M_RoofMetal_Anime"),
+		MakeColourMaterial(FLinearColor(0.28f, 0.68f, 0.74f), TEXT("MI_RoofMetal_Runtime"))));
+	RoofsGarden->SetMaterial(0, GeneratedOrFallback(
+		TEXT("/Game/Generated/Materials/M_RoofGarden_Anime.M_RoofGarden_Anime"),
+		MakeColourMaterial(FLinearColor(0.42f, 0.72f, 0.38f), TEXT("MI_RoofGarden_Runtime"))));
 	Windows->SetMaterial(0, MakeColourMaterial(SolCityWorld::WindowColour, TEXT("MI_Window_Runtime")));
 	TreeTrunks->SetMaterial(0, MakeColourMaterial(SolCityWorld::TrunkColour, TEXT("MI_TreeTrunk_Runtime")));
 	TreeCrowns->SetMaterial(0, GeneratedOrFallback(
@@ -657,7 +669,13 @@ void ACityWorldActor::GenerateBlocks()
 						MinimumHeight + 120.0f,
 						FMath::Lerp(1060.0f, FMath::Max(OuterMaxBuildingHeight, 300.0f), OuterFalloff));
 					const float Height = FMath::GridSnap(RandomStream.FRandRange(MinimumHeight, MaximumHeight), 120.0f);
-					AddBuilding(LotCentre, BuildingSize, Height, RandomStream.RandRange(0, 6), RandomStream);
+					// A spatial hash guarantees all seven facade palettes are spread
+					// across nearby blocks instead of occasionally clustering by chance.
+					const int32 PaletteHash = GenerationSeed
+						+ (BlockX + GridHalfExtent) * 37
+						+ (BlockY + GridHalfExtent) * 19
+						+ LotX * 5 + LotY * 3;
+					AddBuilding(LotCentre, BuildingSize, Height, FMath::Abs(PaletteHash) % 7, RandomStream);
 				}
 			}
 		}
@@ -682,16 +700,32 @@ void ACityWorldActor::AddBuilding(const FVector2D& Centre, const FVector2D& Size
 	BodyComponent->AddInstance(FTransform(FRotator::ZeroRotator, FVector(Centre.X, Centre.Y, BodyCentreZ),
 		FVector(Size.X / SolCityWorld::BasicMeshSize, Size.Y / SolCityWorld::BasicMeshSize, Height / SolCityWorld::BasicMeshSize)));
 
+	UHierarchicalInstancedStaticMeshComponent* RoofComponent = Roofs;
+	switch (PaletteIndex % 7)
+	{
+	case 1:
+	case 2:
+	case 5:
+		RoofComponent = RoofsMetal;
+		break;
+	case 3:
+	case 6:
+		RoofComponent = RoofsGarden;
+		break;
+	default:
+		break;
+	}
+
 	const float RoofZ = SolCityWorld::BuildingBaseZ + Height + 22.0f;
-	Roofs->AddInstance(FTransform(FRotator::ZeroRotator, FVector(Centre.X, Centre.Y, RoofZ),
+	RoofComponent->AddInstance(FTransform(FRotator::ZeroRotator, FVector(Centre.X, Centre.Y, RoofZ),
 		FVector(Size.X * 1.07f / SolCityWorld::BasicMeshSize, Size.Y * 1.07f / SolCityWorld::BasicMeshSize, 0.38f)));
 
 	// A small rooftop box breaks up the skyline while keeping the same box-model language.
-	if (RandomStream.FRand() < 0.58f)
+	if (RoofComponent != RoofsGarden && RandomStream.FRand() < 0.58f)
 	{
 		const FVector2D UnitSize(Size.X * RandomStream.FRandRange(0.22f, 0.38f), Size.Y * RandomStream.FRandRange(0.22f, 0.38f));
 		const float UnitHeight = RandomStream.FRandRange(70.0f, 140.0f);
-		Roofs->AddInstance(FTransform(FRotator::ZeroRotator,
+		RoofComponent->AddInstance(FTransform(FRotator::ZeroRotator,
 			FVector(Centre.X + Size.X * 0.18f, Centre.Y - Size.Y * 0.16f, RoofZ + UnitHeight * 0.5f),
 			FVector(UnitSize.X / SolCityWorld::BasicMeshSize, UnitSize.Y / SolCityWorld::BasicMeshSize, UnitHeight / SolCityWorld::BasicMeshSize)));
 	}

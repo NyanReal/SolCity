@@ -65,7 +65,9 @@ def make_import_task(source: Path, destination_name: str, replace: bool) -> unre
 
 def get_or_create_material(entry: dict, texture: unreal.Texture2D) -> unreal.Material:
     material_object_path = f"{MATERIAL_PATH}/{entry['material_name']}"
-    material = unreal.EditorAssetLibrary.load_asset(material_object_path)
+    material = None
+    if unreal.EditorAssetLibrary.does_asset_exist(material_object_path):
+        material = unreal.EditorAssetLibrary.load_asset(material_object_path)
     if not isinstance(material, unreal.Material):
         material = unreal.AssetToolsHelpers.get_asset_tools().create_asset(
             entry["material_name"], MATERIAL_PATH, unreal.Material, unreal.MaterialFactoryNew()
@@ -75,6 +77,13 @@ def get_or_create_material(entry: dict, texture: unreal.Texture2D) -> unreal.Mat
 
     unreal.MaterialEditingLibrary.delete_all_material_expressions(material)
     material.set_editor_property("used_with_instanced_static_meshes", True)
+    is_unlit = bool(entry.get("unlit", False))
+    material.set_editor_property(
+        "shading_model",
+        unreal.MaterialShadingModel.MSM_UNLIT
+        if is_unlit
+        else unreal.MaterialShadingModel.MSM_DEFAULT_LIT,
+    )
 
     texcoord = unreal.MaterialEditingLibrary.create_material_expression(
         material, unreal.MaterialExpressionTextureCoordinate, -760, -40
@@ -107,18 +116,40 @@ def get_or_create_material(entry: dict, texture: unreal.Texture2D) -> unreal.Mat
     sample.set_editor_property("parameter_name", "BaseTexture")
     sample.set_editor_property("texture", texture)
     unreal.MaterialEditingLibrary.connect_material_expressions(uv_output, "", sample, "UVs")
-    unreal.MaterialEditingLibrary.connect_material_property(
-        sample, "RGB", unreal.MaterialProperty.MP_BASE_COLOR
-    )
+    if is_unlit:
+        unreal.MaterialEditingLibrary.connect_material_property(
+            sample, "RGB", unreal.MaterialProperty.MP_EMISSIVE_COLOR
+        )
+    else:
+        unreal.MaterialEditingLibrary.connect_material_property(
+            sample, "RGB", unreal.MaterialProperty.MP_BASE_COLOR
+        )
 
-    roughness = unreal.MaterialEditingLibrary.create_material_expression(
-        material, unreal.MaterialExpressionScalarParameter, -100, 180
-    )
-    roughness.set_editor_property("parameter_name", "Roughness")
-    roughness.set_editor_property("default_value", 0.32 if entry.get("animated", False) else 0.82)
-    unreal.MaterialEditingLibrary.connect_material_property(
-        roughness, "", unreal.MaterialProperty.MP_ROUGHNESS
-    )
+    emissive_strength = float(entry.get("emissive_strength", 0.0))
+    if emissive_strength > 0.0:
+        emissive = unreal.MaterialEditingLibrary.create_material_expression(
+            material, unreal.MaterialExpressionScalarParameter, -100, 280
+        )
+        emissive.set_editor_property("parameter_name", "EmissiveStrength")
+        emissive.set_editor_property("default_value", emissive_strength)
+        emissive_multiply = unreal.MaterialEditingLibrary.create_material_expression(
+            material, unreal.MaterialExpressionMultiply, 120, 80
+        )
+        unreal.MaterialEditingLibrary.connect_material_expressions(sample, "RGB", emissive_multiply, "A")
+        unreal.MaterialEditingLibrary.connect_material_expressions(emissive, "", emissive_multiply, "B")
+        unreal.MaterialEditingLibrary.connect_material_property(
+            emissive_multiply, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR
+        )
+
+    if not is_unlit:
+        roughness = unreal.MaterialEditingLibrary.create_material_expression(
+            material, unreal.MaterialExpressionScalarParameter, -100, 180
+        )
+        roughness.set_editor_property("parameter_name", "Roughness")
+        roughness.set_editor_property("default_value", 0.32 if entry.get("animated", False) else 0.82)
+        unreal.MaterialEditingLibrary.connect_material_property(
+            roughness, "", unreal.MaterialProperty.MP_ROUGHNESS
+        )
 
     unreal.MaterialEditingLibrary.recompile_material(material)
     unreal.EditorAssetLibrary.save_loaded_asset(material)
