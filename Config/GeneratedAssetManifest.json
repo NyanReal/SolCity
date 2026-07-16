@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 3,
   "style": "peaceful Japanese animation background, vivid clean pastel colors, warm clear daylight",
   "assets": [
     {
@@ -81,6 +81,57 @@
       "material_name": "M_ShopIconAtlas_Anime",
       "tiling": 1.0,
       "animated": false
+    },
+    {
+      "id": "REQ-011",
+      "source": "Content/Generated/SourceTextures/T_GroundGrass_Anime_v2.png",
+      "texture_name": "T_GroundGrass_Anime_v2",
+      "material_name": "M_GroundGrass_Anime_v2",
+      "tiling": 4.0,
+      "animated": false
+    },
+    {
+      "id": "REQ-012",
+      "source": "Content/Generated/SourceTextures/T_TreeFoliage_Anime.png",
+      "texture_name": "T_TreeFoliage_Anime",
+      "material_name": "M_TreeFoliage_Anime",
+      "tiling": 2.5,
+      "animated": false
+    },
+    {
+      "id": "REQ-013",
+      "source": "Content/Generated/SourceTextures/T_BridgeDeck_Anime.png",
+      "texture_name": "T_BridgeDeck_Anime",
+      "material_name": "M_BridgeDeck_Anime",
+      "tiling": 3.0,
+      "animated": false
+    },
+    {
+      "id": "DIRECT-014",
+      "source": "Content/Generated/SourceTextures/T_FacadeCafe_Anime.png",
+      "texture_name": "T_FacadeCafe_Anime",
+      "material_name": "M_FacadeCafe_Anime",
+      "tiling": 1.0,
+      "animated": false,
+      "queue": false
+    },
+    {
+      "id": "DIRECT-015",
+      "source": "Content/Generated/SourceTextures/T_FacadeApartment_Anime.png",
+      "texture_name": "T_FacadeApartment_Anime",
+      "material_name": "M_FacadeApartment_Anime",
+      "tiling": 1.0,
+      "animated": false,
+      "queue": false
+    },
+    {
+      "id": "DIRECT-016",
+      "source": "Content/Generated/SourceTextures/T_FacadeTownhouse_Anime.png",
+      "texture_name": "T_FacadeTownhouse_Anime",
+      "material_name": "M_FacadeTownhouse_Anime",
+      "tiling": 1.0,
+      "animated": false,
+      "queue": false
     }
   ]
 }
