@@ -17,6 +17,7 @@ BUILDING_DIR = "/Game/Art/Buildings"
 ASSETS = {
     "AnimeGrass": "T_AnimeGrass.png",
     "AnimeAsphalt": "T_AnimeAsphalt.png",
+    "AnimeSidewalkPavers": "T_AnimeSidewalkPavers.png",
     "AnimeWater": "T_AnimeWater.png",
     "AnimeFacade": "T_AnimeFacade.png",
 }
@@ -107,6 +108,30 @@ def apply_native_building_materials():
     module.main()
 
 
+def connect_world_space_uv(material, sample, tile_world_size, x=-620, y=-80):
+    """Map a top-facing HISM surface in world centimeters, independent of box scale."""
+    world_position = unreal.MaterialEditingLibrary.create_material_expression(
+        material, unreal.MaterialExpressionWorldPosition, x, y
+    )
+    xy_mask = unreal.MaterialEditingLibrary.create_material_expression(
+        material, unreal.MaterialExpressionComponentMask, x + 170, y
+    )
+    xy_mask.set_editor_property("r", True)
+    xy_mask.set_editor_property("g", True)
+    tile_size = unreal.MaterialEditingLibrary.create_material_expression(
+        material, unreal.MaterialExpressionScalarParameter, x + 170, y + 150
+    )
+    tile_size.set_editor_property("parameter_name", "TileWorldSize")
+    tile_size.set_editor_property("default_value", tile_world_size)
+    divide = unreal.MaterialEditingLibrary.create_material_expression(
+        material, unreal.MaterialExpressionDivide, x + 350, y
+    )
+    unreal.MaterialEditingLibrary.connect_material_expressions(world_position, "", xy_mask, "Input")
+    unreal.MaterialEditingLibrary.connect_material_expressions(xy_mask, "", divide, "A")
+    unreal.MaterialEditingLibrary.connect_material_expressions(tile_size, "", divide, "B")
+    unreal.MaterialEditingLibrary.connect_material_expressions(divide, "", sample, "Coordinates")
+
+
 def configure_material(material, asset_key, texture, is_water=False):
     """Rebuild a generated material in-place so existing map references survive."""
     unreal.MaterialEditingLibrary.delete_all_material_expressions(material)
@@ -117,7 +142,9 @@ def configure_material(material, asset_key, texture, is_water=False):
     sample.set_editor_property("parameter_name", "SurfaceTexture")
     sample.set_editor_property("texture", texture)
 
-    if is_water:
+    if asset_key == "AnimeSidewalkPavers":
+        connect_world_space_uv(material, sample, 320.0)
+    elif is_water:
         texcoord = unreal.MaterialEditingLibrary.create_material_expression(
             material, unreal.MaterialExpressionTextureCoordinate, -620, 0
         )
@@ -153,7 +180,9 @@ def configure_material(material, asset_key, texture, is_water=False):
     roughness = unreal.MaterialEditingLibrary.create_material_expression(
         material, unreal.MaterialExpressionConstant, -120, 220
     )
-    roughness.set_editor_property("r", 0.22 if is_water else (0.9 if asset_key == "AnimeGrass" else 0.78))
+    roughness.set_editor_property(
+        "r", 0.22 if is_water else (0.92 if asset_key == "AnimeSidewalkPavers" else (0.9 if asset_key == "AnimeGrass" else 0.78))
+    )
     unreal.MaterialEditingLibrary.connect_material_property(
         roughness, "", unreal.MaterialProperty.MP_ROUGHNESS
     )
@@ -182,6 +211,92 @@ def make_material(asset_key, texture, is_water=False):
             unreal.MaterialFactoryNew(),
         )
     return configure_material(material, asset_key, texture, is_water)
+
+
+def make_tinted_surface_material(asset_name, texture, tint, roughness, tile_world_size):
+    """Create a world-aligned material for scaled road/zone HISM boxes."""
+    asset_tools = unreal.AssetToolsHelpers.get_asset_tools()
+    material_path = f"{MATERIAL_DIR}/{asset_name}"
+    material = unreal.load_asset(material_path)
+    if not material:
+        material = asset_tools.create_asset(
+            asset_name, MATERIAL_DIR, unreal.Material, unreal.MaterialFactoryNew()
+        )
+    unreal.MaterialEditingLibrary.delete_all_material_expressions(material)
+    material.set_editor_property("used_with_instanced_static_meshes", True)
+
+    sample = unreal.MaterialEditingLibrary.create_material_expression(
+        material, unreal.MaterialExpressionTextureSampleParameter2D, -180, 0
+    )
+    sample.set_editor_property("parameter_name", "SurfaceTexture")
+    sample.set_editor_property("texture", texture)
+    connect_world_space_uv(material, sample, tile_world_size, -760, -80)
+
+    tint_parameter = unreal.MaterialEditingLibrary.create_material_expression(
+        material, unreal.MaterialExpressionVectorParameter, -180, 160
+    )
+    tint_parameter.set_editor_property("parameter_name", "BaseColorTint")
+    tint_parameter.set_editor_property(
+        "default_value", unreal.LinearColor(tint[0], tint[1], tint[2], 1.0)
+    )
+    multiply = unreal.MaterialEditingLibrary.create_material_expression(
+        material, unreal.MaterialExpressionMultiply, 80, 0
+    )
+    unreal.MaterialEditingLibrary.connect_material_expressions(sample, "RGB", multiply, "A")
+    unreal.MaterialEditingLibrary.connect_material_expressions(tint_parameter, "", multiply, "B")
+    unreal.MaterialEditingLibrary.connect_material_property(
+        multiply, "", unreal.MaterialProperty.MP_BASE_COLOR
+    )
+
+    roughness_expression = unreal.MaterialEditingLibrary.create_material_expression(
+        material, unreal.MaterialExpressionConstant, 80, 190
+    )
+    roughness_expression.set_editor_property("r", roughness)
+    unreal.MaterialEditingLibrary.connect_material_property(
+        roughness_expression, "", unreal.MaterialProperty.MP_ROUGHNESS
+    )
+    unreal.MaterialEditingLibrary.recompile_material(material)
+    unreal.EditorAssetLibrary.save_loaded_asset(material)
+    return material
+
+
+def make_marking_material():
+    asset_tools = unreal.AssetToolsHelpers.get_asset_tools()
+    asset_name = "M_RoadMarking"
+    material = unreal.load_asset(f"{MATERIAL_DIR}/{asset_name}")
+    if not material:
+        material = asset_tools.create_asset(
+            asset_name, MATERIAL_DIR, unreal.Material, unreal.MaterialFactoryNew()
+        )
+    unreal.MaterialEditingLibrary.delete_all_material_expressions(material)
+    material.set_editor_property("used_with_instanced_static_meshes", True)
+    color = unreal.MaterialEditingLibrary.create_material_expression(
+        material, unreal.MaterialExpressionVectorParameter, -180, 0
+    )
+    color.set_editor_property("parameter_name", "BaseColorTint")
+    color.set_editor_property("default_value", unreal.LinearColor(0.96, 0.82, 0.34, 1.0))
+    roughness = unreal.MaterialEditingLibrary.create_material_expression(
+        material, unreal.MaterialExpressionConstant, -180, 160
+    )
+    roughness.set_editor_property("r", 0.72)
+    unreal.MaterialEditingLibrary.connect_material_property(color, "", unreal.MaterialProperty.MP_BASE_COLOR)
+    unreal.MaterialEditingLibrary.connect_material_property(roughness, "", unreal.MaterialProperty.MP_ROUGHNESS)
+    unreal.MaterialEditingLibrary.recompile_material(material)
+    unreal.EditorAssetLibrary.save_loaded_asset(material)
+    return material
+
+
+def make_city_surface_library(imported):
+    asphalt = imported["AnimeAsphalt"]
+    grass = imported["AnimeGrass"]
+    make_tinted_surface_material("M_RoadLocal", asphalt, (0.74, 0.78, 0.80), 0.86, 720.0)
+    make_tinted_surface_material("M_RoadCollector", asphalt, (0.62, 0.69, 0.73), 0.84, 720.0)
+    make_tinted_surface_material("M_RoadArterial", asphalt, (0.50, 0.58, 0.64), 0.82, 720.0)
+    make_marking_material()
+    make_tinted_surface_material("M_GroundResidential", grass, (0.72, 0.88, 0.72), 0.94, 1800.0)
+    make_tinted_surface_material("M_GroundCommercial", asphalt, (0.78, 0.72, 0.63), 0.90, 1400.0)
+    make_tinted_surface_material("M_GroundPark", grass, (0.54, 1.02, 0.58), 0.96, 1400.0)
+    make_tinted_surface_material("M_GroundParking", asphalt, (0.88, 0.88, 0.82), 0.91, 900.0)
 
 
 def make_distant_ground_material():
@@ -232,6 +347,7 @@ def main():
     imported = {key: import_texture(key, filename) for key, filename in ASSETS.items()}
     for key, texture in imported.items():
         make_material(key, texture, is_water=(key == "AnimeWater"))
+    make_city_surface_library(imported)
     make_distant_ground_material()
     import_authored_buildings()
     apply_native_building_materials()

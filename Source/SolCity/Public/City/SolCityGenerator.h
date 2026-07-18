@@ -38,6 +38,10 @@ struct SOLCITY_API FSolCityRoadSegment
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Road")
 	ESolCityRoadClass RoadClass = ESolCityRoadClass::Local;
 
+	/** Total marked vehicle lanes across both travel directions. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Road")
+	int32 LaneCount = 1;
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Road")
 	bool bBridge = false;
 };
@@ -75,7 +79,7 @@ public:
 	int32 Seed = 71527;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sol City|Generation", meta = (ClampMin = "6000.0", UIMin = "6000.0"))
-	float CityDiameter = 36000.0f;
+	float CityDiameter = 48000.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sol City|River", meta = (ClampMin = "500.0", ClampMax = "2500.0"))
 	float RiverWidth = 2400.0f;
@@ -86,8 +90,8 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sol City|River")
 	float WaterPanSpeed = 0.035f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sol City|Buildings", meta = (ClampMin = "12", ClampMax = "220"))
-	int32 TargetBuildingCount = 112;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sol City|Buildings", meta = (ClampMin = "12", ClampMax = "480"))
+	int32 TargetBuildingCount = 320;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sol City|Generation")
 	bool bGenerateInEditor = true;
@@ -101,8 +105,32 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sol City|Materials")
 	TObjectPtr<UMaterialInterface> RoadMaterial;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sol City|Materials|Road Hierarchy")
+	TObjectPtr<UMaterialInterface> LocalRoadMaterial;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sol City|Materials|Road Hierarchy")
+	TObjectPtr<UMaterialInterface> CollectorRoadMaterial;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sol City|Materials|Road Hierarchy")
+	TObjectPtr<UMaterialInterface> ArterialRoadMaterial;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sol City|Materials|Road Hierarchy")
+	TObjectPtr<UMaterialInterface> RoadMarkingMaterial;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sol City|Materials")
 	TObjectPtr<UMaterialInterface> SidewalkMaterial;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sol City|Materials|Ground Zones")
+	TObjectPtr<UMaterialInterface> ResidentialGroundMaterial;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sol City|Materials|Ground Zones")
+	TObjectPtr<UMaterialInterface> CommercialGroundMaterial;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sol City|Materials|Ground Zones")
+	TObjectPtr<UMaterialInterface> ParkGroundMaterial;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sol City|Materials|Ground Zones")
+	TObjectPtr<UMaterialInterface> ParkingGroundMaterial;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sol City|Materials")
 	TObjectPtr<UMaterialInterface> WaterMaterial;
@@ -130,6 +158,39 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sol City|Buildings|Modules")
 	TObjectPtr<UStaticMesh> BuildingCrownModuleMesh;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sol City|Buildings|Corner Modules")
+	TObjectPtr<UStaticMesh> CornerBaseModuleMesh;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sol City|Buildings|Corner Modules")
+	TObjectPtr<UStaticMesh> CornerMiddleModuleMesh;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sol City|Buildings|Corner Modules")
+	TObjectPtr<UStaticMesh> CornerCrownModuleMesh;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sol City|Buildings|Rooftop Modules")
+	TObjectPtr<UStaticMesh> RooftopHVACMesh;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sol City|Buildings|Rooftop Modules")
+	TObjectPtr<UStaticMesh> RooftopWaterTankMesh;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sol City|Buildings|Rooftop Modules")
+	TObjectPtr<UStaticMesh> RooftopSolarMesh;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sol City|Buildings|Rooftop Modules")
+	TObjectPtr<UStaticMesh> RooftopAntennaMesh;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sol City|Buildings|Rooftop Modules")
+	TObjectPtr<UStaticMesh> RooftopPergolaMesh;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sol City|Buildings|Rooftop Modules")
+	TObjectPtr<UStaticMesh> RooftopHelipadMesh;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sol City|Buildings|Rooftop Modules")
+	TObjectPtr<UStaticMesh> RooftopWarningBeaconMesh;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sol City|Buildings|Modules")
+	TObjectPtr<UStaticMesh> SkybridgeConnectorMesh;
+
 	/** X-forward, longitudinally subdivided road section deformed by spline meshes. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sol City|Roads")
 	TObjectPtr<UStaticMesh> AuthoredRoadSplineMesh;
@@ -142,6 +203,39 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sol City|Foliage")
 	TObjectPtr<UStaticMesh> AuthoredTreeMesh;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sol City|Urban Props")
+	TObjectPtr<UStaticMesh> BenchMesh;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sol City|Urban Props")
+	TObjectPtr<UStaticMesh> TrashBinMesh;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sol City|Urban Props")
+	TObjectPtr<UStaticMesh> StreetLampMesh;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sol City|Urban Props")
+	TObjectPtr<UStaticMesh> PlanterMesh;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sol City|Urban Props")
+	TObjectPtr<UStaticMesh> BollardMesh;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sol City|Urban Props")
+	TObjectPtr<UStaticMesh> ParkingWheelStopMesh;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sol City|Urban Props|Billboard")
+	TObjectPtr<UStaticMesh> BillboardMesh;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sol City|Urban Props|Billboard")
+	TObjectPtr<UMaterialInterface> BillboardAdMaterial01;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sol City|Urban Props|Billboard")
+	TObjectPtr<UMaterialInterface> BillboardAdMaterial02;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sol City|Urban Props|Billboard")
+	TObjectPtr<UMaterialInterface> BillboardAdMaterial03;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sol City|Urban Props|Billboard")
+	TObjectPtr<UMaterialInterface> BillboardAdMaterial04;
 
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Sol City|Navigation")
 	TArray<FSolCityRoadSegment> RoadSegments;
@@ -181,10 +275,29 @@ private:
 	TObjectPtr<UMaterialInterface> DefaultSurfaceMaterial;
 
 	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> RoadInstances;
+	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> CollectorRoadInstances;
+	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> ArterialRoadInstances;
+	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> RoadMarkingInstances;
+	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> LaneMarkingInstances;
 	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> SidewalkInstances;
+	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> ResidentialGroundInstances;
+	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> CommercialGroundInstances;
+	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> ParkGroundInstances;
+	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> ParkingGroundInstances;
 	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> BuildingBaseModuleInstances;
 	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> BuildingMiddleModuleInstances;
 	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> BuildingCrownModuleInstances;
+	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> CornerBaseModuleInstances;
+	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> CornerMiddleModuleInstances;
+	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> CornerCrownModuleInstances;
+	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> RooftopHVACInstances;
+	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> RooftopWaterTankInstances;
+	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> RooftopSolarInstances;
+	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> RooftopAntennaInstances;
+	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> RooftopPergolaInstances;
+	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> RooftopHelipadInstances;
+	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> RooftopWarningBeaconInstances;
+	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> SkybridgeConnectorInstances;
 	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> AuthoredBuildingInstances;
 	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> AuthoredCornerRetailInstances;
 	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> AuthoredSteppedTowerInstances;
@@ -192,6 +305,16 @@ private:
 	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> AuthoredBridgeInstances;
 	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> JunctionInstances;
 	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> TreeInstances;
+	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> BenchInstances;
+	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> TrashBinInstances;
+	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> StreetLampInstances;
+	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> PlanterInstances;
+	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> BollardInstances;
+	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> ParkingWheelStopInstances;
+	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> BillboardInstances01;
+	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> BillboardInstances02;
+	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> BillboardInstances03;
+	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> BillboardInstances04;
 	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> DetailInstances;
 	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> CylinderInstances;
 	TObjectPtr<UProceduralMeshComponent> WaterSurfaceMesh;
@@ -215,6 +338,7 @@ private:
 
 	void GenerateGroundAndRiver();
 	void GenerateRoadHierarchy();
+	void GenerateDistrictSurfaces();
 	void GenerateBuildings();
 	void GenerateTrees();
 	void GenerateBridge();
@@ -225,7 +349,8 @@ private:
 	void AddRoadSegment(const FVector& Start, const FVector& End, float Width, ESolCityRoadClass RoadClass, bool bAddSidewalks = true, bool bBridge = false, bool bCreateVisual = true);
 	void AddPolylineRoad(const TArray<FVector>& Points, float Width, ESolCityRoadClass RoadClass, bool bAddSidewalks = true);
 	void AddSplineRoadVisual(const TArray<FVector>& Points, float Width);
-	void AddJunctionCap(const FVector& Position, float Width);
+	void AddRoadMarkings(const FVector& Start, const FVector& End, float Width, ESolCityRoadClass RoadClass, bool bBridge);
+	void AddJunctionCap(const FVector& Position, float Width, ESolCityRoadClass RoadClass);
 	void AddBuildingMass(const FVector2D& Center, const FVector2D& Footprint, float YawDegrees, int32 Style, float Height);
 	bool AddAuthoredBuilding(
 		UHierarchicalInstancedStaticMeshComponent* Group,

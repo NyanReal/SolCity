@@ -1,4 +1,4 @@
-"""Import Blender MCP-authored SolCity props as combined Unreal static meshes."""
+"""Import Blender MCP-authored SolCity props into Unreal static meshes."""
 
 import os
 
@@ -14,6 +14,16 @@ ASSETS = (
     "SM_SolCity_RoadJunction_01",
     "SM_SolCity_Bridge_01",
     "SM_SolCity_Tree_01",
+)
+
+URBAN_PROP_KIT = "SM_SolCity_UrbanProps_01"
+URBAN_PROP_MESHES = (
+    "SM_SolCity_Bench_01",
+    "SM_SolCity_TrashBin_01",
+    "SM_SolCity_StreetLamp_01",
+    "SM_SolCity_Planter_01",
+    "SM_SolCity_Bollard_01",
+    "SM_SolCity_ParkingWheelStop_01",
 )
 
 
@@ -46,6 +56,39 @@ def import_prop(asset_name):
     return mesh
 
 
+def import_urban_prop_kit():
+    """Import the authored kit as six independently placeable static meshes."""
+    task = unreal.AssetImportTask()
+    task.set_editor_property("filename", os.path.join(SOURCE_DIR, URBAN_PROP_KIT + ".fbx"))
+    task.set_editor_property("destination_path", DESTINATION)
+    task.set_editor_property("automated", True)
+    task.set_editor_property("replace_existing", True)
+    task.set_editor_property("save", True)
+
+    options = unreal.FbxImportUI()
+    options.set_editor_property("import_mesh", True)
+    options.set_editor_property("import_as_skeletal", False)
+    options.set_editor_property("import_materials", True)
+    options.set_editor_property("import_textures", False)
+    options.set_editor_property("mesh_type_to_import", unreal.FBXImportType.FBXIT_STATIC_MESH)
+    static_data = options.get_editor_property("static_mesh_import_data")
+    static_data.set_editor_property("combine_meshes", False)
+    static_data.set_editor_property("generate_lightmap_u_vs", True)
+    static_data.set_editor_property("auto_generate_collision", True)
+    task.set_editor_property("options", options)
+
+    unreal.AssetToolsHelpers.get_asset_tools().import_asset_tasks([task])
+    missing = []
+    for mesh_name in URBAN_PROP_MESHES:
+        mesh = unreal.load_asset(f"{DESTINATION}/{mesh_name}")
+        if not mesh:
+            missing.append(mesh_name)
+            continue
+        unreal.EditorAssetLibrary.save_loaded_asset(mesh)
+    if missing:
+        raise RuntimeError("SolCity urban prop kit import missed: " + ", ".join(missing))
+
+
 def enable_material_usage():
     for asset_path in unreal.EditorAssetLibrary.list_assets(DESTINATION, recursive=True, include_folder=False):
         asset = unreal.load_asset(asset_path)
@@ -57,5 +100,6 @@ def enable_material_usage():
 
 for name in ASSETS:
     import_prop(name)
+import_urban_prop_kit()
 enable_material_usage()
-unreal.log("SolCity: Blender MCP prop set imported and material usages enabled.")
+unreal.log("SolCity: Blender MCP prop set and six-piece urban kit imported.")

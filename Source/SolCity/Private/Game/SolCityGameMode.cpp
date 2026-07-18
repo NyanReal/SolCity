@@ -279,6 +279,15 @@ void ASolCityGameMode::BeginPlay()
 	// generator keeps colorful engine-material fallbacks when setup was skipped.
 	Generator->GroundMaterial = GroundMaterial;
 	Generator->RoadMaterial = TryLoadMaterial(TEXT("/Game/Art/Materials/M_AnimeAsphalt.M_AnimeAsphalt"));
+	Generator->LocalRoadMaterial = TryLoadMaterial(TEXT("/Game/Art/Materials/M_RoadLocal.M_RoadLocal"));
+	Generator->CollectorRoadMaterial = TryLoadMaterial(TEXT("/Game/Art/Materials/M_RoadCollector.M_RoadCollector"));
+	Generator->ArterialRoadMaterial = TryLoadMaterial(TEXT("/Game/Art/Materials/M_RoadArterial.M_RoadArterial"));
+	Generator->RoadMarkingMaterial = TryLoadMaterial(TEXT("/Game/Art/Materials/M_RoadMarking.M_RoadMarking"));
+	Generator->SidewalkMaterial = TryLoadMaterial(TEXT("/Game/Art/Materials/M_AnimeSidewalkPavers.M_AnimeSidewalkPavers"));
+	Generator->ResidentialGroundMaterial = TryLoadMaterial(TEXT("/Game/Art/Materials/M_GroundResidential.M_GroundResidential"));
+	Generator->CommercialGroundMaterial = TryLoadMaterial(TEXT("/Game/Art/Materials/M_GroundCommercial.M_GroundCommercial"));
+	Generator->ParkGroundMaterial = TryLoadMaterial(TEXT("/Game/Art/Materials/M_GroundPark.M_GroundPark"));
+	Generator->ParkingGroundMaterial = TryLoadMaterial(TEXT("/Game/Art/Materials/M_GroundParking.M_GroundParking"));
 	Generator->WaterMaterial = TryLoadMaterial(TEXT("/Game/Art/Materials/M_AnimeWater.M_AnimeWater"));
 	UGameplayStatics::FinishSpawningActor(Generator, GeneratorTransform);
 
@@ -302,30 +311,36 @@ void ASolCityGameMode::BeginPlay()
 			continue;
 		}
 		const FVector Perpendicular(-Direction.Y, Direction.X, 0.0f);
-		const float LaneOffset = FMath::Min(180.0f, Segment.HalfWidth * 0.42f);
 		const float LaneZ = Segment.bBridge ? 135.0f : 42.0f;
 		const float Speed = Segment.RoadClass == ESolCityRoadClass::Arterial ? 760.0f :
 			(Segment.RoadClass == ESolCityRoadClass::Local ? 430.0f : 600.0f);
+		const int32 DirectionalLaneCount = Segment.LaneCount >= 4 ? 2 : 1;
+		for (int32 LaneIndex = 0; LaneIndex < DirectionalLaneCount; ++LaneIndex)
+		{
+			// Local one-lane streets share the centerline. Two-lane collectors use
+			// one 3.6 m lane per direction, while four-lane arterials add a second
+			// lane outward from the center line.
+			const float LaneOffset = Segment.LaneCount == 1 ? 0.0f : (LaneIndex + 0.5f) * 360.0f;
+			FLaneLink Forward;
+			Forward.Start = RoadNodes.AddDefaulted();
+			Forward.End = RoadNodes.AddDefaulted();
+			FLaneLink Reverse;
+			Reverse.Start = RoadNodes.AddDefaulted();
+			Reverse.End = RoadNodes.AddDefaulted();
 
-		FLaneLink Forward;
-		Forward.Start = RoadNodes.AddDefaulted();
-		Forward.End = RoadNodes.AddDefaulted();
-		FLaneLink Reverse;
-		Reverse.Start = RoadNodes.AddDefaulted();
-		Reverse.End = RoadNodes.AddDefaulted();
-
-		RoadNodes[Forward.Start].LocalPosition = Segment.Start + Perpendicular * LaneOffset + FVector(0, 0, LaneZ);
-		RoadNodes[Forward.End].LocalPosition = Segment.End + Perpendicular * LaneOffset + FVector(0, 0, LaneZ);
-		RoadNodes[Reverse.Start].LocalPosition = Segment.End - Perpendicular * LaneOffset + FVector(0, 0, LaneZ);
-		RoadNodes[Reverse.End].LocalPosition = Segment.Start - Perpendicular * LaneOffset + FVector(0, 0, LaneZ);
-		RoadNodes[Forward.Start].SpeedLimit = RoadNodes[Forward.End].SpeedLimit = Speed;
-		RoadNodes[Reverse.Start].SpeedLimit = RoadNodes[Reverse.End].SpeedLimit = Speed;
-		AddUniqueConnection(RoadNodes[Forward.Start].OutgoingNodeIndices, Forward.End);
-		AddUniqueConnection(RoadNodes[Reverse.Start].OutgoingNodeIndices, Reverse.End);
-		Forward.ReverseStart = Reverse.Start;
-		Reverse.ReverseStart = Forward.Start;
-		Links.Add(Forward);
-		Links.Add(Reverse);
+			RoadNodes[Forward.Start].LocalPosition = Segment.Start + Perpendicular * LaneOffset + FVector(0, 0, LaneZ);
+			RoadNodes[Forward.End].LocalPosition = Segment.End + Perpendicular * LaneOffset + FVector(0, 0, LaneZ);
+			RoadNodes[Reverse.Start].LocalPosition = Segment.End - Perpendicular * LaneOffset + FVector(0, 0, LaneZ);
+			RoadNodes[Reverse.End].LocalPosition = Segment.Start - Perpendicular * LaneOffset + FVector(0, 0, LaneZ);
+			RoadNodes[Forward.Start].SpeedLimit = RoadNodes[Forward.End].SpeedLimit = Speed;
+			RoadNodes[Reverse.Start].SpeedLimit = RoadNodes[Reverse.End].SpeedLimit = Speed;
+			AddUniqueConnection(RoadNodes[Forward.Start].OutgoingNodeIndices, Forward.End);
+			AddUniqueConnection(RoadNodes[Reverse.Start].OutgoingNodeIndices, Reverse.End);
+			Forward.ReverseStart = Reverse.Start;
+			Reverse.ReverseStart = Forward.Start;
+			Links.Add(Forward);
+			Links.Add(Reverse);
+		}
 	}
 
 	// Join segment ends at shared/nearby junctions. A U-turn fallback prevents
