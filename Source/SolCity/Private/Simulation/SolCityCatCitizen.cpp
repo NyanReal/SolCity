@@ -1,5 +1,6 @@
 #include "Simulation/SolCityCatCitizen.h"
 
+#include "Components/SceneComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Simulation/SolCityPedestrianNetwork.h"
 #include "UObject/ConstructorHelpers.h"
@@ -7,8 +8,11 @@
 ASolCityCatCitizen::ASolCityCatCitizen()
 {
 	PrimaryActorTick.bCanEverTick = true;
+	USceneComponent* CitizenRoot = CreateDefaultSubobject<USceneComponent>(TEXT("CitizenRoot"));
+	SetRootComponent(CitizenRoot);
+
 	CatMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("CatMesh"));
-	SetRootComponent(CatMesh);
+	CatMesh->SetupAttachment(CitizenRoot);
 	CatMesh->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
 	CatMesh->SetCollisionResponseToAllChannels(ECR_Overlap);
 	CatMesh->SetRelativeLocation(FVector(0.0f, 0.0f, 30.0f));
@@ -47,6 +51,9 @@ ASolCityCatCitizen::ASolCityCatCitizen()
 	{
 		CatMesh->SetStaticMesh(AuthoredCatAsset.Object);
 		CatMesh->SetRelativeLocation(FVector(0.0f, 0.0f, -1.5f));
+		// The authored Blender cat faces local -Y. Keep the pedestrian actor's
+		// local +X path heading intact and rotate only its visual hierarchy.
+		CatMesh->SetRelativeRotation(FRotator(0.0f, 90.0f, 0.0f));
 		CatMesh->SetRelativeScale3D(FVector(0.85f));
 		for (UStaticMeshComponent* FallbackPart : {HeadMesh.Get(), LeftEarMesh.Get(), RightEarMesh.Get(), TailMesh.Get()})
 		{

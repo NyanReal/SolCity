@@ -14,6 +14,18 @@
 namespace SolCityGeneration
 {
 	constexpr float CubeSize = 100.0f;
+	// One real-world traffic lane is the visual ruler for procedural architecture.
+	constexpr float StandardLaneWidth = 360.0f;
+	constexpr float BuildingEdgeMargin = StandardLaneWidth * 1.25f;
+	constexpr float BuildingGap = StandardLaneWidth * 0.65f;
+	constexpr float RiverBuildingSetback = StandardLaneWidth * 0.75f;
+	constexpr float ProceduralRoadSetback = StandardLaneWidth * 0.65f;
+	constexpr float BuildingRoadSearchDepth = StandardLaneWidth * 4.0f;
+	constexpr float MinimumBuildingFootprint = StandardLaneWidth * 2.0f;
+	constexpr float MaximumBuildingFootprint = StandardLaneWidth * 3.35f;
+	constexpr float MaximumAuthoredBuildingHeight = StandardLaneWidth * 7.5f;
+	constexpr float TargetParcelPitch = StandardLaneWidth * 9.45f;
+	constexpr int32 AuthoredBuildingInterval = 4;
 	constexpr float RoadSurfaceZ = 7.0f;
 	constexpr float SidewalkSurfaceZ = 16.0f;
 	constexpr float BridgeDeckZ = 105.0f;
@@ -22,6 +34,17 @@ namespace SolCityGeneration
 	{
 		const FVector Flat(Value.X, Value.Y, 0.0f);
 		return Flat.GetSafeNormal();
+	}
+
+	FVector2D RotatedExtent2D(const FVector2D& Size, float YawDegrees)
+	{
+		const FVector2D LocalExtent = Size * 0.5f;
+		const float YawRadians = FMath::DegreesToRadians(YawDegrees);
+		const float AbsCos = FMath::Abs(FMath::Cos(YawRadians));
+		const float AbsSin = FMath::Abs(FMath::Sin(YawRadians));
+		return FVector2D(
+			AbsCos * LocalExtent.X + AbsSin * LocalExtent.Y,
+			AbsSin * LocalExtent.X + AbsCos * LocalExtent.Y);
 	}
 }
 
@@ -40,6 +63,9 @@ ASolCityGenerator::ASolCityGenerator()
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> AuthoredMidRiseAsset(TEXT("/Game/Art/Buildings/SM_SolCity_MidRise_01.SM_SolCity_MidRise_01"));
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> AuthoredCornerRetailAsset(TEXT("/Game/Art/Buildings/SM_SolCity_CornerRetail_01.SM_SolCity_CornerRetail_01"));
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> AuthoredSteppedTowerAsset(TEXT("/Game/Art/Buildings/SM_SolCity_SteppedTower_01.SM_SolCity_SteppedTower_01"));
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> BuildingBaseModuleAsset(TEXT("/Game/Art/Buildings/SM_SolCity_BuildingBase_01.SM_SolCity_BuildingBase_01"));
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> BuildingMiddleModuleAsset(TEXT("/Game/Art/Buildings/SM_SolCity_BuildingMiddle_01.SM_SolCity_BuildingMiddle_01"));
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> BuildingCrownModuleAsset(TEXT("/Game/Art/Buildings/SM_SolCity_BuildingCrown_01.SM_SolCity_BuildingCrown_01"));
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> AuthoredRoadSplineAsset(TEXT("/Game/Art/Props/SM_SolCity_RoadSpline_01.SM_SolCity_RoadSpline_01"));
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> AuthoredRoadJunctionAsset(TEXT("/Game/Art/Props/SM_SolCity_RoadJunction_01.SM_SolCity_RoadJunction_01"));
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> AuthoredBridgeAsset(TEXT("/Game/Art/Props/SM_SolCity_Bridge_01.SM_SolCity_Bridge_01"));
@@ -51,6 +77,9 @@ ASolCityGenerator::ASolCityGenerator()
 	AuthoredMidRiseMesh = AuthoredMidRiseAsset.Object;
 	AuthoredCornerRetailMesh = AuthoredCornerRetailAsset.Object;
 	AuthoredSteppedTowerMesh = AuthoredSteppedTowerAsset.Object;
+	BuildingBaseModuleMesh = BuildingBaseModuleAsset.Object;
+	BuildingMiddleModuleMesh = BuildingMiddleModuleAsset.Object;
+	BuildingCrownModuleMesh = BuildingCrownModuleAsset.Object;
 	AuthoredRoadSplineMesh = AuthoredRoadSplineAsset.Object;
 	AuthoredRoadJunctionMesh = AuthoredRoadJunctionAsset.Object;
 	AuthoredBridgeMesh = AuthoredBridgeAsset.Object;
@@ -117,6 +146,14 @@ void ASolCityGenerator::RegenerateCity()
 		AuthoredBuildingInstances ? AuthoredBuildingInstances->GetInstanceCount() : 0,
 		AuthoredCornerRetailInstances ? AuthoredCornerRetailInstances->GetInstanceCount() : 0,
 		AuthoredSteppedTowerInstances ? AuthoredSteppedTowerInstances->GetInstanceCount() : 0);
+	UE_LOG(LogTemp, Display, TEXT("SolCity authored uniform scales (360 cm lane basis): MidRise=%.3f CornerRetail=%.3f SteppedTower=%.3f"),
+		GetAuthoredBuildingUniformScale(AuthoredMidRiseMesh),
+		GetAuthoredBuildingUniformScale(AuthoredCornerRetailMesh),
+		GetAuthoredBuildingUniformScale(AuthoredSteppedTowerMesh));
+	UE_LOG(LogTemp, Display, TEXT("SolCity procedural stack modules: Base=%d Middle=%d Crown=%d"),
+		BuildingBaseModuleInstances ? BuildingBaseModuleInstances->GetInstanceCount() : 0,
+		BuildingMiddleModuleInstances ? BuildingMiddleModuleInstances->GetInstanceCount() : 0,
+		BuildingCrownModuleInstances ? BuildingCrownModuleInstances->GetInstanceCount() : 0);
 	bHasGenerated = true;
 }
 
@@ -143,12 +180,12 @@ void ASolCityGenerator::ClearGeneratedComponents()
 	GeneratedComponents.Reset();
 	RoadInstances = nullptr;
 	SidewalkInstances = nullptr;
-	BuildingInstances = nullptr;
-	AccentBuildingInstances = nullptr;
+	BuildingBaseModuleInstances = nullptr;
+	BuildingMiddleModuleInstances = nullptr;
+	BuildingCrownModuleInstances = nullptr;
 	AuthoredBuildingInstances = nullptr;
 	AuthoredCornerRetailInstances = nullptr;
 	AuthoredSteppedTowerInstances = nullptr;
-	RoofInstances = nullptr;
 	BridgeInstances = nullptr;
 	AuthoredBridgeInstances = nullptr;
 	JunctionInstances = nullptr;
@@ -164,8 +201,18 @@ void ASolCityGenerator::CreateInstanceGroups()
 {
 	RoadInstances = CreateInstanceGroup(TEXT("GeneratedRoads"), CubeMesh, RoadMaterial, FLinearColor(0.12f, 0.16f, 0.20f), true);
 	SidewalkInstances = CreateInstanceGroup(TEXT("GeneratedSidewalks"), CubeMesh, SidewalkMaterial, FLinearColor(0.72f, 0.69f, 0.62f), true);
-	BuildingInstances = CreateInstanceGroup(TEXT("GeneratedBuildings"), CubeMesh, BuildingMaterial, FLinearColor(0.93f, 0.69f, 0.47f), true);
-	AccentBuildingInstances = CreateInstanceGroup(TEXT("GeneratedAccentBuildings"), CubeMesh, BuildingMaterial, FLinearColor(0.48f, 0.72f, 0.86f), true);
+	if (BuildingBaseModuleMesh)
+	{
+		BuildingBaseModuleInstances = CreateInstanceGroup(TEXT("GeneratedBuildingBaseModules"), BuildingBaseModuleMesh, nullptr, FLinearColor::White, true, false);
+	}
+	if (BuildingMiddleModuleMesh)
+	{
+		BuildingMiddleModuleInstances = CreateInstanceGroup(TEXT("GeneratedBuildingMiddleModules"), BuildingMiddleModuleMesh, nullptr, FLinearColor::White, true, false);
+	}
+	if (BuildingCrownModuleMesh)
+	{
+		BuildingCrownModuleInstances = CreateInstanceGroup(TEXT("GeneratedBuildingCrownModules"), BuildingCrownModuleMesh, nullptr, FLinearColor::White, true, false);
+	}
 	if (AuthoredMidRiseMesh)
 	{
 		AuthoredBuildingInstances = CreateInstanceGroup(TEXT("GeneratedAuthoredMidRise"), AuthoredMidRiseMesh, nullptr, FLinearColor::White, true, false);
@@ -178,7 +225,6 @@ void ASolCityGenerator::CreateInstanceGroups()
 	{
 		AuthoredSteppedTowerInstances = CreateInstanceGroup(TEXT("GeneratedAuthoredSteppedTower"), AuthoredSteppedTowerMesh, nullptr, FLinearColor::White, true, false);
 	}
-	RoofInstances = CreateInstanceGroup(TEXT("GeneratedRoofs"), CubeMesh, RoofMaterial, FLinearColor(0.80f, 0.25f, 0.22f), true);
 	BridgeInstances = CreateInstanceGroup(TEXT("GeneratedBridge"), CubeMesh, BridgeMaterial, FLinearColor(0.80f, 0.78f, 0.69f), true);
 	if (AuthoredBridgeMesh)
 	{
@@ -601,15 +647,51 @@ bool ASolCityGenerator::IsNearRoad(const FVector2D& Point, float MaxDistance) co
 
 bool ASolCityGenerator::IsBuildingSiteFree(const FVector2D& Center, const FVector2D& Extent) const
 {
-	const float HalfCity = CityDiameter * 0.5f - 320.0f;
-	if (FMath::Abs(Center.X) + Extent.X > HalfCity || FMath::Abs(Center.Y) + Extent.Y > HalfCity || IsInsideRiver(Center, Extent.GetMax() + 160.0f))
+	const float HalfCity = CityDiameter * 0.5f - SolCityGeneration::BuildingEdgeMargin;
+	if (FMath::Abs(Center.X) + Extent.X > HalfCity || FMath::Abs(Center.Y) + Extent.Y > HalfCity || IsInsideRiver(Center, Extent.GetMax() + SolCityGeneration::RiverBuildingSetback))
 	{
 		return false;
 	}
 	for (const FBuildingFootprint& Existing : OccupiedBuildings)
 	{
 		const FVector2D Delta = (Center - Existing.Center).GetAbs();
-		if (Delta.X < Extent.X + Existing.Extent.X + 120.0f && Delta.Y < Extent.Y + Existing.Extent.Y + 120.0f)
+		if (Delta.X < Extent.X + Existing.Extent.X + SolCityGeneration::BuildingGap && Delta.Y < Extent.Y + Existing.Extent.Y + SolCityGeneration::BuildingGap)
+		{
+			return false;
+		}
+	}
+	return true;
+}
+
+bool ASolCityGenerator::IsBuildingClearOfRoads(const FVector2D& Center, const FVector2D& LocalSize, float YawDegrees) const
+{
+	const FVector2D HalfSize = LocalSize * 0.5f;
+	const float YawRadians = FMath::DegreesToRadians(YawDegrees);
+	const FVector2D LocalX(FMath::Cos(YawRadians), FMath::Sin(YawRadians));
+	const FVector2D LocalY(-LocalX.Y, LocalX.X);
+
+	for (const FSolCityRoadSegment& Segment : RoadSegments)
+	{
+		const FVector2D Start(Segment.Start.X, Segment.Start.Y);
+		const FVector2D End(Segment.End.X, Segment.End.Y);
+		const FVector2D AlongRoad = End - Start;
+		const float LengthSquared = AlongRoad.SizeSquared();
+		if (LengthSquared <= KINDA_SMALL_NUMBER)
+		{
+			continue;
+		}
+
+		const float T = FMath::Clamp(FVector2D::DotProduct(Center - Start, AlongRoad) / LengthSquared, 0.0f, 1.0f);
+		const FVector2D NearestPoint = Start + AlongRoad * T;
+		const FVector2D Separation = Center - NearestPoint;
+		const float Distance = Separation.Size();
+		const FVector2D RoadNormal = Distance > KINDA_SMALL_NUMBER
+			? Separation / Distance
+			: FVector2D(-AlongRoad.Y, AlongRoad.X).GetSafeNormal();
+		const float ProjectedBuildingRadius =
+			FMath::Abs(FVector2D::DotProduct(LocalX, RoadNormal)) * HalfSize.X +
+			FMath::Abs(FVector2D::DotProduct(LocalY, RoadNormal)) * HalfSize.Y;
+		if (Distance < Segment.HalfWidth + SolCityGeneration::ProceduralRoadSetback + ProjectedBuildingRadius)
 		{
 			return false;
 		}
@@ -620,10 +702,12 @@ bool ASolCityGenerator::IsBuildingSiteFree(const FVector2D& Center, const FVecto
 void ASolCityGenerator::GenerateBuildings()
 {
 	const float HalfCity = CityDiameter * 0.5f;
+	const int32 DensityTarget = FMath::Max(12, FMath::RoundToInt(FMath::Square(CityDiameter / SolCityGeneration::TargetParcelPitch)));
+	const int32 EffectiveTargetCount = FMath::Min(TargetBuildingCount, DensityTarget);
 	int32 Accepted = 0;
-	const int32 MaxAttempts = TargetBuildingCount * 55;
+	const int32 MaxAttempts = EffectiveTargetCount * 90;
 
-	for (int32 Attempt = 0; Attempt < MaxAttempts && Accepted < TargetBuildingCount; ++Attempt)
+	for (int32 Attempt = 0; Attempt < MaxAttempts && Accepted < EffectiveTargetCount; ++Attempt)
 	{
 		// Low-discrepancy polar sampling avoids rows while still filling districts.
 		const float GoldenAngle = 137.50776f;
@@ -631,136 +715,292 @@ void ASolCityGenerator::GenerateBuildings()
 		const float Angle = FMath::DegreesToRadians(Attempt * GoldenAngle + Random.FRandRange(-12.0f, 12.0f));
 		const FVector2D Candidate(FMath::Cos(Angle) * Radius, FMath::Sin(Angle) * Radius);
 
-		if (!IsNearRoad(Candidate, 980.0f) || IsNearRoad(Candidate, 140.0f))
+		if (!IsNearRoad(Candidate, SolCityGeneration::BuildingRoadSearchDepth))
 		{
 			continue;
 		}
 
 		const int32 Style = Random.RandRange(0, 4);
-		const FVector2D Footprint(Random.FRandRange(300.0f, 620.0f), Random.FRandRange(260.0f, 560.0f));
-		const FVector2D Extent = Footprint * 0.5f;
-		if (!IsBuildingSiteFree(Candidate, Extent))
+		const float LongSide = Random.FRandRange(SolCityGeneration::StandardLaneWidth * 2.25f, SolCityGeneration::MaximumBuildingFootprint);
+		const float ShortSide = FMath::Max(
+			SolCityGeneration::MinimumBuildingFootprint,
+			LongSide * Random.FRandRange(0.68f, 0.96f));
+		const FVector2D Footprint = Random.RandRange(0, 1) == 0
+			? FVector2D(LongSide, ShortSide)
+			: FVector2D(ShortSide, LongSide);
+		float Height = Random.FRandRange(
+			SolCityGeneration::StandardLaneWidth * 2.5f,
+			SolCityGeneration::StandardLaneWidth * 5.5f);
+		const float CenterBias = 1.0f - FMath::Clamp(Candidate.Size() / HalfCity, 0.0f, 1.0f);
+		Height += FMath::Square(CenterBias) * Random.FRandRange(
+			SolCityGeneration::StandardLaneWidth * 1.5f,
+			SolCityGeneration::StandardLaneWidth * 4.2f);
+		const float Yaw = Random.FRandRange(-38.0f, 38.0f);
+
+		UHierarchicalInstancedStaticMeshComponent* AuthoredGroup = nullptr;
+		UStaticMesh* AuthoredMesh = nullptr;
+		// Every fourth accepted parcel is an authored building. Cycling the three
+		// meshes independently of random style/height guarantees a visible mix.
+		if (Accepted % SolCityGeneration::AuthoredBuildingInterval == 0)
+		{
+			switch ((Accepted / SolCityGeneration::AuthoredBuildingInterval) % 3)
+			{
+			case 0:
+				AuthoredGroup = AuthoredBuildingInstances;
+				AuthoredMesh = AuthoredMidRiseMesh;
+				break;
+			case 1:
+				AuthoredGroup = AuthoredCornerRetailInstances;
+				AuthoredMesh = AuthoredCornerRetailMesh;
+				break;
+			default:
+				AuthoredGroup = AuthoredSteppedTowerInstances;
+				AuthoredMesh = AuthoredSteppedTowerMesh;
+				break;
+			}
+			if (!AuthoredGroup || !AuthoredMesh)
+			{
+				// Missing authored assets never block city generation.
+				AuthoredGroup = nullptr;
+				AuthoredMesh = nullptr;
+			}
+		}
+
+		// Authored FBX buildings are complete models. Their native mesh bounds,
+		// not the procedural target footprint, own the parcel they occupy.
+		const float AuthoredUniformScale = GetAuthoredBuildingUniformScale(AuthoredMesh);
+		FVector2D LocalOccupiedSize = AuthoredMesh
+			? FVector2D(AuthoredMesh->GetBoundingBox().GetSize().X, AuthoredMesh->GetBoundingBox().GetSize().Y) * AuthoredUniformScale
+			: Footprint;
+		FVector2D OccupiedExtent = AuthoredMesh ? GetAuthoredBuildingExtent(AuthoredMesh, Yaw, AuthoredUniformScale) : SolCityGeneration::RotatedExtent2D(Footprint, Yaw);
+		if (OccupiedExtent.GetMin() <= KINDA_SMALL_NUMBER)
+		{
+			AuthoredGroup = nullptr;
+			AuthoredMesh = nullptr;
+			LocalOccupiedSize = Footprint;
+			OccupiedExtent = SolCityGeneration::RotatedExtent2D(Footprint, Yaw);
+		}
+		if (!IsBuildingSiteFree(Candidate, OccupiedExtent) || !IsBuildingClearOfRoads(Candidate, LocalOccupiedSize, Yaw))
 		{
 			continue;
 		}
 
-		float Height = Random.FRandRange(380.0f, 1200.0f);
-		const float CenterBias = 1.0f - FMath::Clamp(Candidate.Size() / HalfCity, 0.0f, 1.0f);
-		Height += FMath::Square(CenterBias) * Random.FRandRange(900.0f, 2400.0f);
-		const float Yaw = Random.FRandRange(-38.0f, 38.0f);
-		if (AuthoredSteppedTowerInstances && Style == 2 && Height > 1550.0f)
-		{
-			AddAuthoredBuilding(AuthoredSteppedTowerInstances, AuthoredSteppedTowerMesh, Candidate, Footprint, Yaw, Height);
-		}
-		else if (AuthoredBuildingInstances && Style == 0 && Height > 850.0f)
-		{
-			AddAuthoredBuilding(AuthoredBuildingInstances, AuthoredMidRiseMesh, Candidate, Footprint, Yaw, Height);
-		}
-		else if (AuthoredCornerRetailInstances && Style == 4 && Height < 1450.0f)
-		{
-			AddAuthoredBuilding(AuthoredCornerRetailInstances, AuthoredCornerRetailMesh, Candidate, Footprint, Yaw, FMath::Clamp(Height, 520.0f, 1100.0f));
-		}
-		else
+		if (!AuthoredMesh || !AddAuthoredBuilding(AuthoredGroup, AuthoredMesh, Candidate, Yaw, AuthoredUniformScale))
 		{
 			AddBuildingMass(Candidate, Footprint, Yaw, Style, Height);
+			OccupiedExtent = SolCityGeneration::RotatedExtent2D(Footprint, Yaw);
 		}
 
 		FBuildingFootprint& NewFootprint = OccupiedBuildings.AddDefaulted_GetRef();
 		NewFootprint.Center = Candidate;
-		NewFootprint.Extent = Extent;
+		NewFootprint.Extent = OccupiedExtent;
 		++Accepted;
 	}
 }
 
-void ASolCityGenerator::AddAuthoredBuilding(
+float ASolCityGenerator::GetAuthoredBuildingUniformScale(UStaticMesh* Mesh) const
+{
+	if (!Mesh)
+	{
+		return 1.0f;
+	}
+
+	const FVector MeshSize = Mesh->GetBoundingBox().GetSize();
+	if (MeshSize.GetMin() <= KINDA_SMALL_NUMBER)
+	{
+		return 1.0f;
+	}
+
+	const float FootprintScale = SolCityGeneration::MaximumBuildingFootprint / FMath::Max(MeshSize.X, MeshSize.Y);
+	const float HeightScale = SolCityGeneration::MaximumAuthoredBuildingHeight / MeshSize.Z;
+	return FMath::Clamp(FMath::Min(FootprintScale, HeightScale), 0.10f, 1.0f);
+}
+
+FVector2D ASolCityGenerator::GetAuthoredBuildingExtent(UStaticMesh* Mesh, float YawDegrees, float UniformScale) const
+{
+	if (!Mesh)
+	{
+		return FVector2D::ZeroVector;
+	}
+
+	const FVector MeshSize = Mesh->GetBoundingBox().GetSize();
+	if (MeshSize.X <= KINDA_SMALL_NUMBER || MeshSize.Y <= KINDA_SMALL_NUMBER)
+	{
+		return FVector2D::ZeroVector;
+	}
+
+	return SolCityGeneration::RotatedExtent2D(FVector2D(MeshSize.X, MeshSize.Y) * UniformScale, YawDegrees);
+}
+
+bool ASolCityGenerator::AddAuthoredBuilding(
 	UHierarchicalInstancedStaticMeshComponent* Group,
 	UStaticMesh* Mesh,
 	const FVector2D& Center,
-	const FVector2D& Footprint,
 	float YawDegrees,
-	float Height)
+	float UniformScale)
 {
 	if (!Group || !Mesh)
 	{
-		AddBuildingMass(Center, Footprint, YawDegrees, 0, Height);
-		return;
+		return false;
 	}
 
 	const FBox Bounds = Mesh->GetBoundingBox();
 	const FVector MeshSize = Bounds.GetSize();
 	if (MeshSize.GetMin() <= KINDA_SMALL_NUMBER)
 	{
-		AddBuildingMass(Center, Footprint, YawDegrees, 0, Height);
-		return;
+		return false;
 	}
 
-	const FVector Scale(Footprint.X / MeshSize.X, Footprint.Y / MeshSize.Y, Height / MeshSize.Z);
 	const FRotator Rotation(0.0f, YawDegrees, 0.0f);
-	const FVector DesiredCenter(Center.X, Center.Y, Height * 0.5f);
-	const FVector Translation = DesiredCenter - Rotation.RotateVector(Bounds.GetCenter() * Scale);
-	Group->AddInstance(FTransform(Rotation, Translation, Scale));
+	const FVector UniformScale3D(UniformScale);
+	const FVector DesiredCenter(Center.X, Center.Y, MeshSize.Z * UniformScale * 0.5f);
+	const FVector Translation = DesiredCenter - Rotation.RotateVector(Bounds.GetCenter() * UniformScale3D);
+	Group->AddInstance(FTransform(Rotation, Translation, UniformScale3D));
+	return true;
 }
 
 void ASolCityGenerator::AddBuildingMass(const FVector2D& Center, const FVector2D& Footprint, float YawDegrees, int32 Style, float Height)
 {
-	UHierarchicalInstancedStaticMeshComponent* WallGroup = (Style % 2 == 0) ? BuildingInstances : AccentBuildingInstances;
-	const FVector BaseCenter(Center.X, Center.Y, Height * 0.5f);
+	if (!BuildingBaseModuleInstances || !BuildingMiddleModuleInstances || !BuildingCrownModuleInstances ||
+		!BuildingBaseModuleMesh || !BuildingMiddleModuleMesh || !BuildingCrownModuleMesh)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("SolCity skipped a procedural building because one or more authored stack modules are unavailable."));
+		return;
+	}
+
+	const float BaseModuleHeight = BuildingBaseModuleMesh->GetBoundingBox().GetSize().Z;
+	const float MidModuleHeight = BuildingMiddleModuleMesh->GetBoundingBox().GetSize().Z;
+	const float CrownModuleHeight = BuildingCrownModuleMesh->GetBoundingBox().GetSize().Z;
+	if (FMath::Min3(BaseModuleHeight, MidModuleHeight, CrownModuleHeight) <= KINDA_SMALL_NUMBER)
+	{
+		return;
+	}
+	const int32 RequestedMidFloorCount = FMath::Max(1,
+		FMath::RoundToInt((Height - BaseModuleHeight - CrownModuleHeight) / MidModuleHeight));
+	const float MaximumHeightToWidthRatio = Style == 2 ? 3.20f : 2.60f;
+	const int32 AspectRatioFloorCap = FMath::Max(1, FMath::FloorToInt(
+		(Footprint.GetMin() * MaximumHeightToWidthRatio - BaseModuleHeight - CrownModuleHeight) / MidModuleHeight));
+	const int32 StyleFloorCap = Style == 2 ? 8 : (Style == 4 ? 4 : 7);
+	const int32 MidFloorCount = FMath::Clamp(RequestedMidFloorCount, 1, FMath::Min(AspectRatioFloorCap, StyleFloorCap));
+	float HighestRoofZ = BaseModuleHeight + MidFloorCount * MidModuleHeight;
+
+	auto AddStack = [this, Center, YawDegrees](
+		UHierarchicalInstancedStaticMeshComponent* Group,
+		UStaticMesh* ModuleMesh,
+		const FVector2D& LocalOffset,
+		const FVector2D& ModuleFootprint,
+		float StartZ,
+		int32 ModuleCount)
+	{
+		if (!Group || !ModuleMesh || ModuleCount <= 0)
+		{
+			return;
+		}
+		const FBox ModuleBounds = ModuleMesh->GetBoundingBox();
+		const FVector ModuleSize = ModuleBounds.GetSize();
+		if (ModuleSize.GetMin() <= KINDA_SMALL_NUMBER)
+		{
+			return;
+		}
+		// Modules keep their authored storey height. Only one shared XY scalar is
+		// chosen from the lane-derived parcel footprint; Z always remains 1.0.
+		const float XYScale = FMath::Min(ModuleFootprint.X / ModuleSize.X, ModuleFootprint.Y / ModuleSize.Y);
+		const FVector ModuleScale(XYScale, XYScale, 1.0f);
+		const float ModuleHeight = ModuleSize.Z;
+		const FRotator ModuleRotation(0.0f, YawDegrees, 0.0f);
+		const FVector RotatedOffset = FRotator(0.0f, YawDegrees, 0.0f).RotateVector(FVector(LocalOffset.X, LocalOffset.Y, 0.0f));
+		for (int32 ModuleIndex = 0; ModuleIndex < ModuleCount; ++ModuleIndex)
+		{
+			const float ModuleCenterZ = StartZ + (ModuleIndex + 0.5f) * ModuleHeight;
+			const FVector DesiredCenter = FVector(Center.X, Center.Y, ModuleCenterZ) + RotatedOffset;
+			const FVector Translation = DesiredCenter - ModuleRotation.RotateVector(ModuleBounds.GetCenter() * ModuleScale);
+			Group->AddInstance(FTransform(ModuleRotation, Translation, ModuleScale));
+		}
+	};
 
 	switch (Style)
 	{
 	case 0: // Setback mid-rise
 	{
-		const float PodiumHeight = Height * 0.32f;
-		AddBox(WallGroup, FVector(Center.X, Center.Y, PodiumHeight * 0.5f), FVector(Footprint.X, Footprint.Y, PodiumHeight), YawDegrees);
+		AddStack(BuildingBaseModuleInstances, BuildingBaseModuleMesh, FVector2D::ZeroVector, Footprint, 0.0f, 1);
 		const FVector2D TowerSize = Footprint * 0.72f;
-		AddBox(WallGroup, FVector(Center.X, Center.Y, PodiumHeight + (Height - PodiumHeight) * 0.5f), FVector(TowerSize.X, TowerSize.Y, Height - PodiumHeight), YawDegrees);
-		AddBox(RoofInstances, FVector(Center.X, Center.Y, Height + 34.0f), FVector(TowerSize.X + 28.0f, TowerSize.Y + 28.0f, 68.0f), YawDegrees);
+		AddStack(BuildingMiddleModuleInstances, BuildingMiddleModuleMesh, FVector2D::ZeroVector, TowerSize, BaseModuleHeight, MidFloorCount);
+		AddStack(BuildingCrownModuleInstances, BuildingCrownModuleMesh, FVector2D::ZeroVector, TowerSize, HighestRoofZ, 1);
+		HighestRoofZ += CrownModuleHeight;
 		break;
 	}
 	case 1: // L-shaped apartment mass
 	{
-		AddBox(WallGroup, BaseCenter, FVector(Footprint.X, Footprint.Y * 0.46f, Height), YawDegrees);
-		const FVector LocalOffset = FRotator(0.0f, YawDegrees, 0.0f).RotateVector(FVector(-Footprint.X * 0.29f, Footprint.Y * 0.25f, 0.0f));
-		AddBox(WallGroup, BaseCenter + LocalOffset, FVector(Footprint.X * 0.42f, Footprint.Y * 0.52f, Height * 0.76f), YawDegrees);
-		AddBox(RoofInstances, FVector(Center.X, Center.Y, Height + 26.0f), FVector(Footprint.X * 0.88f, Footprint.Y * 0.42f, 52.0f), YawDegrees);
+		const FVector2D MainWing(Footprint.X, Footprint.Y * 0.46f);
+		const FVector2D SideWing(Footprint.X * 0.42f, Footprint.Y * 0.52f);
+		const FVector2D SideOffset(-Footprint.X * 0.29f, Footprint.Y * 0.25f);
+		AddStack(BuildingBaseModuleInstances, BuildingBaseModuleMesh, FVector2D::ZeroVector, MainWing, 0.0f, 1);
+		AddStack(BuildingBaseModuleInstances, BuildingBaseModuleMesh, SideOffset, SideWing, 0.0f, 1);
+		AddStack(BuildingMiddleModuleInstances, BuildingMiddleModuleMesh, FVector2D::ZeroVector, MainWing, BaseModuleHeight, MidFloorCount);
+		const int32 SideFloorCount = FMath::Max(1, MidFloorCount - 1);
+		AddStack(BuildingMiddleModuleInstances, BuildingMiddleModuleMesh, SideOffset, SideWing, BaseModuleHeight, SideFloorCount);
+		AddStack(BuildingCrownModuleInstances, BuildingCrownModuleMesh, FVector2D::ZeroVector, MainWing, HighestRoofZ, 1);
+		HighestRoofZ += CrownModuleHeight;
 		break;
 	}
 	case 2: // Slender tower with stepped crown
 	{
-		AddBox(WallGroup, FVector(Center.X, Center.Y, Height * 0.43f), FVector(Footprint.X, Footprint.Y, Height * 0.86f), YawDegrees);
-		AddBox(WallGroup, FVector(Center.X, Center.Y, Height * 0.93f), FVector(Footprint.X * 0.72f, Footprint.Y * 0.72f, Height * 0.14f), YawDegrees + 8.0f);
-		AddBox(RoofInstances, FVector(Center.X, Center.Y, Height + 38.0f), FVector(Footprint.X * 0.55f, Footprint.Y * 0.55f, 76.0f), YawDegrees + 8.0f);
+		AddStack(BuildingBaseModuleInstances, BuildingBaseModuleMesh, FVector2D::ZeroVector, Footprint, 0.0f, 1);
+		const FVector2D TowerSize = Footprint * 0.82f;
+		AddStack(BuildingMiddleModuleInstances, BuildingMiddleModuleMesh, FVector2D::ZeroVector, TowerSize, BaseModuleHeight, MidFloorCount);
+		AddStack(BuildingCrownModuleInstances, BuildingCrownModuleMesh, FVector2D::ZeroVector, TowerSize * 0.72f, HighestRoofZ, 1);
+		HighestRoofZ += CrownModuleHeight;
 		break;
 	}
 	case 3: // Courtyard cluster
 	{
-		const float WingWidth = FMath::Min(Footprint.X, Footprint.Y) * 0.24f;
-		AddBox(WallGroup, BaseCenter, FVector(Footprint.X, WingWidth, Height), YawDegrees);
-		const FVector SideOffset = FRotator(0.0f, YawDegrees, 0.0f).RotateVector(FVector(0.0f, (Footprint.Y - WingWidth) * 0.5f, 0.0f));
-		AddBox(WallGroup, BaseCenter + SideOffset, FVector(WingWidth, Footprint.Y - WingWidth, Height * 0.78f), YawDegrees);
-		AddBox(WallGroup, BaseCenter - SideOffset, FVector(WingWidth, Footprint.Y - WingWidth, Height * 0.78f), YawDegrees);
-		AddBox(RoofInstances, FVector(Center.X, Center.Y, Height + 24.0f), FVector(Footprint.X, WingWidth + 24.0f, 48.0f), YawDegrees);
+		const float WingWidth = FMath::Clamp(
+			FMath::Min(Footprint.X, Footprint.Y) * 0.34f,
+			SolCityGeneration::StandardLaneWidth * 0.75f,
+			FMath::Min(Footprint.X, Footprint.Y) * 0.40f);
+		const FVector2D CrossWing(Footprint.X, WingWidth);
+		const FVector2D SideWing(WingWidth, Footprint.Y - WingWidth);
+		const FVector2D SideOffset(0.0f, (Footprint.Y - WingWidth) * 0.5f);
+		AddStack(BuildingBaseModuleInstances, BuildingBaseModuleMesh, FVector2D::ZeroVector, CrossWing, 0.0f, 1);
+		AddStack(BuildingBaseModuleInstances, BuildingBaseModuleMesh, SideOffset, SideWing, 0.0f, 1);
+		AddStack(BuildingBaseModuleInstances, BuildingBaseModuleMesh, -SideOffset, SideWing, 0.0f, 1);
+		AddStack(BuildingMiddleModuleInstances, BuildingMiddleModuleMesh, FVector2D::ZeroVector, CrossWing, BaseModuleHeight, MidFloorCount);
+		const int32 WingFloorCount = FMath::Max(1, MidFloorCount - 1);
+		AddStack(BuildingMiddleModuleInstances, BuildingMiddleModuleMesh, SideOffset, SideWing, BaseModuleHeight, WingFloorCount);
+		AddStack(BuildingMiddleModuleInstances, BuildingMiddleModuleMesh, -SideOffset, SideWing, BaseModuleHeight, WingFloorCount);
+		AddStack(BuildingCrownModuleInstances, BuildingCrownModuleMesh, FVector2D::ZeroVector, CrossWing, HighestRoofZ, 1);
+		HighestRoofZ += CrownModuleHeight;
 		break;
 	}
 	default: // Small anime-neighborhood row houses
 	{
-		const int32 HouseCount = 2 + Random.RandRange(0, 2);
+		const int32 MaximumHouseCount = FMath::Clamp(
+			FMath::FloorToInt(Footprint.X / (SolCityGeneration::StandardLaneWidth * 1.35f)), 1, 2);
+		const int32 HouseCount = Random.RandRange(1, MaximumHouseCount);
 		for (int32 HouseIndex = 0; HouseIndex < HouseCount; ++HouseIndex)
 		{
 			const float Alpha = (HouseIndex + 0.5f) / HouseCount - 0.5f;
-			const FVector Offset = FRotator(0.0f, YawDegrees, 0.0f).RotateVector(FVector(Alpha * Footprint.X, 0.0f, 0.0f));
-			const float HouseHeight = Height * Random.FRandRange(0.70f, 1.0f);
-			AddBox(WallGroup, FVector(Center.X, Center.Y, HouseHeight * 0.5f) + Offset, FVector(Footprint.X / HouseCount - 24.0f, Footprint.Y, HouseHeight), YawDegrees);
-			AddBox(RoofInstances, FVector(Center.X, Center.Y, HouseHeight + 32.0f) + Offset, FVector(Footprint.X / HouseCount, Footprint.Y + 30.0f, 64.0f), YawDegrees);
+			const FVector2D HouseOffset(Alpha * Footprint.X, 0.0f);
+			const FVector2D HouseFootprint(Footprint.X / HouseCount - SolCityGeneration::StandardLaneWidth * 0.08f, Footprint.Y);
+			const int32 HouseMidFloorCount = FMath::Clamp(MidFloorCount + Random.RandRange(-1, 1), 1, 4);
+			AddStack(BuildingBaseModuleInstances, BuildingBaseModuleMesh, HouseOffset, HouseFootprint, 0.0f, 1);
+			AddStack(BuildingMiddleModuleInstances, BuildingMiddleModuleMesh, HouseOffset, HouseFootprint * FVector2D(0.92f, 0.92f), BaseModuleHeight, HouseMidFloorCount);
+			const float HouseRoofZ = BaseModuleHeight + HouseMidFloorCount * MidModuleHeight;
+			AddStack(BuildingCrownModuleInstances, BuildingCrownModuleMesh, HouseOffset, HouseFootprint, HouseRoofZ, 1);
+			HighestRoofZ = FMath::Max(HighestRoofZ, HouseRoofZ + CrownModuleHeight);
 		}
 		break;
 	}
 	}
 
 	// Rooftop utilities add scale cues at close zoom.
-	if (Height > 900.0f)
+	if (HighestRoofZ > SolCityGeneration::StandardLaneWidth * 2.5f)
 	{
-		AddBox(DetailInstances, FVector(Center.X, Center.Y, Height + 105.0f), FVector(90.0f, 130.0f, 140.0f), YawDegrees);
+		const FVector UtilitySize(
+			SolCityGeneration::StandardLaneWidth * 0.28f,
+			SolCityGeneration::StandardLaneWidth * 0.38f,
+			SolCityGeneration::StandardLaneWidth * 0.36f);
+		AddBox(DetailInstances, FVector(Center.X, Center.Y, HighestRoofZ + UtilitySize.Z * 0.5f), UtilitySize, YawDegrees);
 	}
 }
 

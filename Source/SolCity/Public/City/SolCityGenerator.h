@@ -87,7 +87,7 @@ public:
 	float WaterPanSpeed = 0.035f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sol City|Buildings", meta = (ClampMin = "12", ClampMax = "220"))
-	int32 TargetBuildingCount = 184;
+	int32 TargetBuildingCount = 112;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sol City|Generation")
 	bool bGenerateInEditor = true;
@@ -105,12 +105,6 @@ public:
 	TObjectPtr<UMaterialInterface> SidewalkMaterial;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sol City|Materials")
-	TObjectPtr<UMaterialInterface> BuildingMaterial;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sol City|Materials")
-	TObjectPtr<UMaterialInterface> RoofMaterial;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sol City|Materials")
 	TObjectPtr<UMaterialInterface> WaterMaterial;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sol City|Materials")
@@ -125,6 +119,16 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sol City|Buildings")
 	TObjectPtr<UStaticMesh> AuthoredSteppedTowerMesh;
+
+	/** Fixed-height authored modules used for every variable-height procedural building. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sol City|Buildings|Modules")
+	TObjectPtr<UStaticMesh> BuildingBaseModuleMesh;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sol City|Buildings|Modules")
+	TObjectPtr<UStaticMesh> BuildingMiddleModuleMesh;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sol City|Buildings|Modules")
+	TObjectPtr<UStaticMesh> BuildingCrownModuleMesh;
 
 	/** X-forward, longitudinally subdivided road section deformed by spline meshes. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sol City|Roads")
@@ -178,12 +182,12 @@ private:
 
 	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> RoadInstances;
 	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> SidewalkInstances;
-	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> BuildingInstances;
-	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> AccentBuildingInstances;
+	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> BuildingBaseModuleInstances;
+	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> BuildingMiddleModuleInstances;
+	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> BuildingCrownModuleInstances;
 	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> AuthoredBuildingInstances;
 	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> AuthoredCornerRetailInstances;
 	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> AuthoredSteppedTowerInstances;
-	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> RoofInstances;
 	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> BridgeInstances;
 	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> AuthoredBridgeInstances;
 	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> JunctionInstances;
@@ -223,17 +227,19 @@ private:
 	void AddSplineRoadVisual(const TArray<FVector>& Points, float Width);
 	void AddJunctionCap(const FVector& Position, float Width);
 	void AddBuildingMass(const FVector2D& Center, const FVector2D& Footprint, float YawDegrees, int32 Style, float Height);
-	void AddAuthoredBuilding(
+	bool AddAuthoredBuilding(
 		UHierarchicalInstancedStaticMeshComponent* Group,
 		UStaticMesh* Mesh,
 		const FVector2D& Center,
-		const FVector2D& Footprint,
 		float YawDegrees,
-		float Height);
+		float UniformScale);
+	float GetAuthoredBuildingUniformScale(UStaticMesh* Mesh) const;
+	FVector2D GetAuthoredBuildingExtent(UStaticMesh* Mesh, float YawDegrees, float UniformScale) const;
 
 	float RiverCenterY(float X) const;
 	bool IsInsideRiver(const FVector2D& Point, float Margin) const;
 	bool IsBuildingSiteFree(const FVector2D& Center, const FVector2D& Extent) const;
+	bool IsBuildingClearOfRoads(const FVector2D& Center, const FVector2D& LocalSize, float YawDegrees) const;
 	bool IsNearRoad(const FVector2D& Point, float MaxDistance) const;
 	float DistanceToSegment2D(const FVector2D& Point, const FVector2D& A, const FVector2D& B) const;
 };

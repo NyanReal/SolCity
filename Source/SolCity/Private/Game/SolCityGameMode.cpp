@@ -2,11 +2,17 @@
 
 #include "City/SolCityGenerator.h"
 #include "Components/DirectionalLightComponent.h"
+#include "Components/ExponentialHeightFogComponent.h"
 #include "Components/LightComponent.h"
 #include "Components/SkyLightComponent.h"
 #include "Components/SkyAtmosphereComponent.h"
+#include "Components/StaticMeshComponent.h"
+#include "Components/VolumetricCloudComponent.h"
 #include "Engine/DirectionalLight.h"
+#include "Engine/ExponentialHeightFog.h"
 #include "Engine/SkyLight.h"
+#include "Engine/StaticMesh.h"
+#include "Engine/StaticMeshActor.h"
 #include "Materials/MaterialInterface.h"
 #include "Player/CityCameraPawn.h"
 #include "Kismet/GameplayStatics.h"
@@ -38,6 +44,30 @@ namespace
 	{
 		return LoadObject<UMaterialInterface>(nullptr, AssetPath);
 	}
+
+	void SpawnDistantGround(UWorld* World, UMaterialInterface* GroundMaterial)
+	{
+		UStaticMesh* PlaneMesh = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Plane.Plane"));
+		if (!World || !PlaneMesh)
+		{
+			return;
+		}
+
+		if (AStaticMeshActor* DistantGround = SpawnAlways<AStaticMeshActor>(World, FVector(0.0f, 0.0f, -280.0f)))
+		{
+			DistantGround->SetActorScale3D(FVector(3000.0f));
+			DistantGround->SetActorEnableCollision(false);
+			UStaticMeshComponent* Mesh = DistantGround->GetStaticMeshComponent();
+			Mesh->SetStaticMesh(PlaneMesh);
+			Mesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+			Mesh->SetCanEverAffectNavigation(false);
+			Mesh->SetCastShadow(false);
+			if (GroundMaterial)
+			{
+				Mesh->SetMaterial(0, GroundMaterial);
+			}
+		}
+	}
 }
 
 ASolCityGameMode::ASolCityGameMode()
@@ -57,13 +87,53 @@ void ASolCityGameMode::BeginPlay()
 	// A real atmosphere gives the movable skylight a blue environment to capture,
 	// keeping shaded facades readable without flattening the sunny art direction.
 	SpawnAlways<ASkyAtmosphere>(World);
-	if (ADirectionalLight* Sun = SpawnAlways<ADirectionalLight>(World, FVector(0.0f, 0.0f, 8000.0f), FRotator(-52.0f, -35.0f, 0.0f)))
+	if (ADirectionalLight* Sun = SpawnAlways<ADirectionalLight>(World, FVector(0.0f, 0.0f, 8000.0f), FRotator(-161.0f, 193.0f, -180.0f)))
 	{
+		Sun->SetActorScale3D(FVector(2.5f));
 		Sun->GetLightComponent()->SetMobility(EComponentMobility::Movable);
-		Sun->GetLightComponent()->SetIntensity(4.25f);
-		Sun->GetLightComponent()->SetIndirectLightingIntensity(1.15f);
-		Sun->GetLightComponent()->SetLightColor(FLinearColor(1.0f, 0.92f, 0.82f));
-		Sun->GetComponent()->SetAtmosphereSunLight(true);
+		Sun->GetLightComponent()->SetIntensity(3.4f);
+		Sun->GetLightComponent()->SetIndirectLightingIntensity(1.05f);
+		Sun->GetLightComponent()->SetLightColor(FLinearColor(1.0f, 0.94f, 0.86f));
+		Sun->GetLightComponent()->SetVolumetricScatteringIntensity(0.8f);
+		UDirectionalLightComponent* SunComponent = Sun->GetComponent();
+		SunComponent->SetAtmosphereSunLight(true);
+		SunComponent->bCastCloudShadows = true;
+		SunComponent->CloudShadowStrength = 0.35f;
+		SunComponent->CloudShadowOnSurfaceStrength = 0.35f;
+		SunComponent->CloudShadowOnAtmosphereStrength = 0.25f;
+	}
+
+	if (AExponentialHeightFog* Fog = SpawnAlways<AExponentialHeightFog>(World, FVector(0.0f, 0.0f, -100.0f)))
+	{
+		UExponentialHeightFogComponent* FogComponent = Fog->GetComponent();
+		FogComponent->SetFogDensity(0.012f);
+		FogComponent->SetFogHeightFalloff(0.16f);
+		FogComponent->SetFogInscatteringColor(FLinearColor(0.36f, 0.49f, 0.62f));
+		FogComponent->SetDirectionalInscatteringColor(FLinearColor(0.75f, 0.70f, 0.62f));
+		FogComponent->SetDirectionalInscatteringStartDistance(18000.0f);
+		FogComponent->SetFogMaxOpacity(0.72f);
+		FogComponent->SetStartDistance(2200.0f);
+		FogComponent->SetEndDistance(220000.0f);
+		FogComponent->SetVolumetricFog(true);
+		FogComponent->SetVolumetricFogScatteringDistribution(0.2f);
+		FogComponent->SetVolumetricFogAlbedo(FColor(205, 220, 232));
+		FogComponent->SetVolumetricFogExtinctionScale(0.65f);
+		FogComponent->SetVolumetricFogDistance(100000.0f);
+	}
+
+	if (AVolumetricCloud* Cloud = SpawnAlways<AVolumetricCloud>(World))
+	{
+		if (UVolumetricCloudComponent* CloudComponent = Cloud->FindComponentByClass<UVolumetricCloudComponent>())
+		{
+			CloudComponent->SetLayerBottomAltitude(5.0f);
+			CloudComponent->SetLayerHeight(8.0f);
+			CloudComponent->SetGroundAlbedo(FColor(110, 138, 102));
+			CloudComponent->SetSkyLightCloudBottomOcclusion(0.18f);
+			CloudComponent->SetViewSampleCountScale(0.75f);
+			CloudComponent->SetShadowViewSampleCountScale(0.75f);
+			CloudComponent->SetbUsePerSampleAtmosphericLightTransmittance(true);
+			CloudComponent->SetMaterial(TryLoadMaterial(TEXT("/Engine/EngineSky/VolumetricClouds/m_SimpleVolumetricCloud_Inst.m_SimpleVolumetricCloud_Inst")));
+		}
 	}
 	if (ASkyLight* Sky = SpawnAlways<ASkyLight>(World))
 	{
@@ -71,13 +141,17 @@ void ASolCityGameMode::BeginPlay()
 		SkyComponent->SetMobility(EComponentMobility::Movable);
 		SkyComponent->SourceType = SLS_CapturedScene;
 		SkyComponent->SetLightColor(FLinearColor(0.68f, 0.82f, 1.0f));
-		SkyComponent->SetIntensity(2.25f);
+		SkyComponent->SetIntensity(2.35f);
 		SkyComponent->SetIndirectLightingIntensity(1.45f);
 		SkyComponent->bLowerHemisphereIsBlack = false;
 		SkyComponent->SetLowerHemisphereColor(FLinearColor(0.22f, 0.34f, 0.52f));
 		SkyComponent->SetRealTimeCaptureEnabled(true);
 		SkyComponent->RecaptureSky();
 	}
+
+	UMaterialInterface* GroundMaterial = TryLoadMaterial(TEXT("/Game/Art/Materials/M_AnimeGrass.M_AnimeGrass"));
+	UMaterialInterface* DistantGroundMaterial = TryLoadMaterial(TEXT("/Game/Art/Materials/M_DistantGround.M_DistantGround"));
+	SpawnDistantGround(World, DistantGroundMaterial ? DistantGroundMaterial : GroundMaterial);
 
 	FTransform GeneratorTransform = FTransform::Identity;
 	ASolCityGenerator* Generator = World->SpawnActorDeferred<ASolCityGenerator>(
@@ -90,9 +164,8 @@ void ASolCityGameMode::BeginPlay()
 
 	// These assets are produced by Content/Python/SetupSolCityAssets.py. The
 	// generator keeps colorful engine-material fallbacks when setup was skipped.
-	Generator->GroundMaterial = TryLoadMaterial(TEXT("/Game/Art/Materials/M_AnimeGrass.M_AnimeGrass"));
+	Generator->GroundMaterial = GroundMaterial;
 	Generator->RoadMaterial = TryLoadMaterial(TEXT("/Game/Art/Materials/M_AnimeAsphalt.M_AnimeAsphalt"));
-	Generator->BuildingMaterial = TryLoadMaterial(TEXT("/Game/Art/Materials/M_AnimeFacade.M_AnimeFacade"));
 	Generator->WaterMaterial = TryLoadMaterial(TEXT("/Game/Art/Materials/M_AnimeWater.M_AnimeWater"));
 	UGameplayStatics::FinishSpawningActor(Generator, GeneratorTransform);
 

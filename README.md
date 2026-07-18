@@ -26,3 +26,5 @@ Unreal Engine 5.7 C++ city-builder simulation prototype. It creates a complete c
 - Separate sidewalk graph used exclusively by autonomous cat citizens
 
 Algorithm rationale and sources are in `Docs/ProceduralCityResearch.md`.
+
+The complete English/Korean setup and reproduction instructions, including Blender MCP installation, are in `Docs/ReproductionGuide_EN_KO.md`.

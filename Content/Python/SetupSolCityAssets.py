@@ -92,18 +92,9 @@ def import_authored_buildings(replace_existing=True):
         unreal.EditorAssetLibrary.save_loaded_asset(mesh)
 
 
-def make_material(asset_key, texture, is_water=False):
-    asset_tools = unreal.AssetToolsHelpers.get_asset_tools()
-    material_path = f"{MATERIAL_DIR}/M_{asset_key}"
-    if unreal.EditorAssetLibrary.does_asset_exist(material_path):
-        unreal.EditorAssetLibrary.delete_asset(material_path)
-
-    material = asset_tools.create_asset(
-        "M_" + asset_key,
-        MATERIAL_DIR,
-        unreal.Material,
-        unreal.MaterialFactoryNew(),
-    )
+def configure_material(material, asset_key, texture, is_water=False):
+    """Rebuild a generated material in-place so existing map references survive."""
+    unreal.MaterialEditingLibrary.delete_all_material_expressions(material)
     material.set_editor_property("used_with_instanced_static_meshes", True)
     sample = unreal.MaterialEditingLibrary.create_material_expression(
         material, unreal.MaterialExpressionTextureSampleParameter2D, -120, 0
@@ -123,13 +114,87 @@ def make_material(asset_key, texture, is_water=False):
         unreal.MaterialEditingLibrary.connect_material_expressions(texcoord, "", panner, "Coordinate")
         unreal.MaterialEditingLibrary.connect_material_expressions(panner, "", sample, "Coordinates")
 
+    base_color_expression = sample
+    base_color_output = "RGB"
+    if asset_key == "AnimeGrass":
+        ground_tint = unreal.MaterialEditingLibrary.create_material_expression(
+            material, unreal.MaterialExpressionVectorParameter, -120, -170
+        )
+        ground_tint.set_editor_property("parameter_name", "GroundTint")
+        # Reduce green and overall luminance without flattening the painted
+        # source texture into a single color.
+        ground_tint.set_editor_property("default_value", unreal.LinearColor(0.40, 0.20, 0.35, 1.0))
+        tinted = unreal.MaterialEditingLibrary.create_material_expression(
+            material, unreal.MaterialExpressionMultiply, 130, 0
+        )
+        unreal.MaterialEditingLibrary.connect_material_expressions(sample, "RGB", tinted, "A")
+        unreal.MaterialEditingLibrary.connect_material_expressions(ground_tint, "", tinted, "B")
+        base_color_expression = tinted
+        base_color_output = ""
+
     unreal.MaterialEditingLibrary.connect_material_property(
-        sample, "RGB", unreal.MaterialProperty.MP_BASE_COLOR
+        base_color_expression, base_color_output, unreal.MaterialProperty.MP_BASE_COLOR
     )
     roughness = unreal.MaterialEditingLibrary.create_material_expression(
         material, unreal.MaterialExpressionConstant, -120, 220
     )
-    roughness.set_editor_property("r", 0.22 if is_water else 0.78)
+    roughness.set_editor_property("r", 0.22 if is_water else (0.9 if asset_key == "AnimeGrass" else 0.78))
+    unreal.MaterialEditingLibrary.connect_material_property(
+        roughness, "", unreal.MaterialProperty.MP_ROUGHNESS
+    )
+    if asset_key == "AnimeGrass":
+        specular = unreal.MaterialEditingLibrary.create_material_expression(
+            material, unreal.MaterialExpressionConstant, 100, 220
+        )
+        specular.set_editor_property("r", 0.2)
+        unreal.MaterialEditingLibrary.connect_material_property(
+            specular, "", unreal.MaterialProperty.MP_SPECULAR
+        )
+    unreal.MaterialEditingLibrary.recompile_material(material)
+    unreal.EditorAssetLibrary.save_loaded_asset(material)
+    return material
+
+
+def make_material(asset_key, texture, is_water=False):
+    asset_tools = unreal.AssetToolsHelpers.get_asset_tools()
+    material_path = f"{MATERIAL_DIR}/M_{asset_key}"
+    material = unreal.load_asset(material_path)
+    if not material:
+        material = asset_tools.create_asset(
+            "M_" + asset_key,
+            MATERIAL_DIR,
+            unreal.Material,
+            unreal.MaterialFactoryNew(),
+        )
+    return configure_material(material, asset_key, texture, is_water)
+
+
+def make_distant_ground_material():
+    """Build a flat, fog-friendly horizon material without stretched texture UVs."""
+    asset_tools = unreal.AssetToolsHelpers.get_asset_tools()
+    material_path = f"{MATERIAL_DIR}/M_DistantGround"
+    material = unreal.load_asset(material_path)
+    if not material:
+        material = asset_tools.create_asset(
+            "M_DistantGround",
+            MATERIAL_DIR,
+            unreal.Material,
+            unreal.MaterialFactoryNew(),
+        )
+
+    unreal.MaterialEditingLibrary.delete_all_material_expressions(material)
+    color = unreal.MaterialEditingLibrary.create_material_expression(
+        material, unreal.MaterialExpressionVectorParameter, -180, 0
+    )
+    color.set_editor_property("parameter_name", "DistantGroundColor")
+    color.set_editor_property("default_value", unreal.LinearColor(0.15, 0.23, 0.16, 1.0))
+    unreal.MaterialEditingLibrary.connect_material_property(
+        color, "", unreal.MaterialProperty.MP_BASE_COLOR
+    )
+    roughness = unreal.MaterialEditingLibrary.create_material_expression(
+        material, unreal.MaterialExpressionConstant, -180, 160
+    )
+    roughness.set_editor_property("r", 0.95)
     unreal.MaterialEditingLibrary.connect_material_property(
         roughness, "", unreal.MaterialProperty.MP_ROUGHNESS
     )
@@ -152,6 +217,7 @@ def main():
     imported = {key: import_texture(key, filename) for key, filename in ASSETS.items()}
     for key, texture in imported.items():
         make_material(key, texture, is_water=(key == "AnimeWater"))
+    make_distant_ground_material()
     import_authored_buildings()
     enable_instanced_material_usage()
     ensure_startup_level()
