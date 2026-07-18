@@ -25,8 +25,9 @@ namespace SolCityGeneration
 	constexpr float MaximumBuildingFootprint = StandardLaneWidth * 5.20f;
 	constexpr float MaximumAuthoredBuildingHeight = StandardLaneWidth * 7.5f;
 	constexpr int32 AuthoredBuildingInterval = 4;
-	constexpr float RoadSurfaceZ = 7.0f;
-	constexpr float SidewalkSurfaceZ = 16.0f;
+	constexpr float RoadSurfaceZ = 8.0f;
+	constexpr float SidewalkSurfaceZ = 23.0f;
+	constexpr float CurbWidth = 20.0f;
 	constexpr float BridgeDeckZ = 105.0f;
 	constexpr float LocalRoadWidth = StandardLaneWidth;
 	constexpr float CollectorRoadWidth = StandardLaneWidth * 2.0f;
@@ -228,6 +229,13 @@ void ASolCityGenerator::RegenerateCity()
 		(RooftopHelipadInstances ? RooftopHelipadInstances->GetInstanceCount() : 0) +
 		(RooftopWarningBeaconInstances ? RooftopWarningBeaconInstances->GetInstanceCount() : 0),
 		SkybridgeConnectorInstances ? SkybridgeConnectorInstances->GetInstanceCount() : 0);
+	UE_LOG(LogTemp, Display, TEXT("SolCity streetscape: trees=%d curbs=%d riverWalls=%d riverWalks=%d riverRails=%d riverGreenBanks=%d"),
+		TreeInstances ? TreeInstances->GetInstanceCount() : 0,
+		CurbInstances ? CurbInstances->GetInstanceCount() : 0,
+		RiverRetainingWallInstances ? RiverRetainingWallInstances->GetInstanceCount() : 0,
+		RiverPromenadeInstances ? RiverPromenadeInstances->GetInstanceCount() : 0,
+		RiverRailingInstances ? RiverRailingInstances->GetInstanceCount() : 0,
+		RiverGreenBankInstances ? RiverGreenBankInstances->GetInstanceCount() : 0);
 	bHasGenerated = true;
 }
 
@@ -257,7 +265,12 @@ void ASolCityGenerator::ClearGeneratedComponents()
 	ArterialRoadInstances = nullptr;
 	RoadMarkingInstances = nullptr;
 	LaneMarkingInstances = nullptr;
+	CurbInstances = nullptr;
 	SidewalkInstances = nullptr;
+	RiverRetainingWallInstances = nullptr;
+	RiverPromenadeInstances = nullptr;
+	RiverRailingInstances = nullptr;
+	RiverGreenBankInstances = nullptr;
 	ResidentialGroundInstances = nullptr;
 	CommercialGroundInstances = nullptr;
 	ParkGroundInstances = nullptr;
@@ -307,7 +320,12 @@ void ASolCityGenerator::CreateInstanceGroups()
 	ArterialRoadInstances = CreateInstanceGroup(TEXT("GeneratedArterialRoads"), CubeMesh, ArterialRoadMaterial ? ArterialRoadMaterial.Get() : RoadMaterial.Get(), FLinearColor(0.50f, 0.58f, 0.64f), true);
 	RoadMarkingInstances = CreateInstanceGroup(TEXT("GeneratedRoadCenterMarkings"), CubeMesh, RoadMarkingMaterial, FLinearColor(0.96f, 0.72f, 0.18f), false);
 	LaneMarkingInstances = CreateInstanceGroup(TEXT("GeneratedRoadLaneMarkings"), CubeMesh, RoadMarkingMaterial, FLinearColor(0.92f, 0.93f, 0.90f), false);
+	CurbInstances = CreateInstanceGroup(TEXT("GeneratedStoneCurbs"), CubeMesh, BridgeMaterial, FLinearColor(0.62f, 0.62f, 0.58f), true);
 	SidewalkInstances = CreateInstanceGroup(TEXT("GeneratedSidewalks"), CubeMesh, SidewalkMaterial, FLinearColor(0.72f, 0.69f, 0.62f), true);
+	RiverRetainingWallInstances = CreateInstanceGroup(TEXT("GeneratedRiverRetainingWalls"), CubeMesh, BridgeMaterial, FLinearColor(0.53f, 0.55f, 0.53f), true);
+	RiverPromenadeInstances = CreateInstanceGroup(TEXT("GeneratedRiverPromenades"), CubeMesh, SidewalkMaterial, FLinearColor(0.72f, 0.69f, 0.62f), true);
+	RiverRailingInstances = CreateInstanceGroup(TEXT("GeneratedRiverRailings"), CubeMesh, BridgeMaterial, FLinearColor(0.16f, 0.22f, 0.23f), true);
+	RiverGreenBankInstances = CreateInstanceGroup(TEXT("GeneratedRiverGreenBanks"), CubeMesh, ParkGroundMaterial ? ParkGroundMaterial.Get() : GroundMaterial.Get(), FLinearColor(0.54f, 0.92f, 0.56f), false);
 	ResidentialGroundInstances = CreateInstanceGroup(TEXT("GeneratedResidentialGround"), CubeMesh, ResidentialGroundMaterial, FLinearColor(0.72f, 0.88f, 0.72f), false);
 	CommercialGroundInstances = CreateInstanceGroup(TEXT("GeneratedCommercialGround"), CubeMesh, CommercialGroundMaterial, FLinearColor(0.78f, 0.72f, 0.63f), false);
 	ParkGroundInstances = CreateInstanceGroup(TEXT("GeneratedParkGround"), CubeMesh, ParkGroundMaterial ? ParkGroundMaterial.Get() : GroundMaterial.Get(), FLinearColor(0.54f, 1.02f, 0.58f), false);
@@ -540,6 +558,71 @@ void ASolCityGenerator::GenerateGroundAndRiver()
 	{
 		WaterSurfaceMesh->SetMaterial(0, WaterMID);
 	}
+
+	// Replace the raw water-to-ground cut with a civil river section: a
+	// retaining wall at the waterline, a concrete promenade, a small edging
+	// curb, and a broad planted verge before the normal city ground begins.
+	constexpr int32 BankSegmentCount = 96;
+	constexpr float WallWidth = 70.0f;
+	constexpr float PromenadeWidth = 360.0f;
+	constexpr float PromenadeTopZ = 12.0f;
+	constexpr float GreenBankWidth = 1500.0f;
+	const float WallCenterOffset = WaterHalfWidth + WallWidth * 0.5f;
+	const float PromenadeCenterOffset = WaterHalfWidth + WallWidth + PromenadeWidth * 0.5f;
+	const float GreenBankCenterOffset = WaterHalfWidth + WallWidth + PromenadeWidth + GreenBankWidth * 0.5f;
+	const float WallHeight = PromenadeTopZ - RiverSurfaceZ;
+	for (int32 Index = 0; Index < BankSegmentCount; ++Index)
+	{
+		const float X0 = FMath::Lerp(-HalfCity, HalfCity, Index / static_cast<float>(BankSegmentCount));
+		const float X1 = FMath::Lerp(-HalfCity, HalfCity, (Index + 1) / static_cast<float>(BankSegmentCount));
+		const FVector A(X0, RiverCenterY(X0), 0.0f);
+		const FVector B(X1, RiverCenterY(X1), 0.0f);
+		const FVector Delta = B - A;
+		const float Length = Delta.Size2D() + 14.0f;
+		const FVector Direction = SolCityGeneration::SafeNormal2D(Delta);
+		const FVector Normal(-Direction.Y, Direction.X, 0.0f);
+		const float Yaw = FMath::RadiansToDegrees(FMath::Atan2(Delta.Y, Delta.X));
+		const FVector Midpoint = (A + B) * 0.5f;
+
+		for (const float Side : {-1.0f, 1.0f})
+		{
+			const FVector WallPlan = Midpoint + Normal * Side * WallCenterOffset;
+			AddBox(RiverRetainingWallInstances,
+				FVector(WallPlan.X, WallPlan.Y, RiverSurfaceZ + WallHeight * 0.5f),
+				FVector(Length, WallWidth, WallHeight), Yaw);
+
+			const FVector WalkPlan = Midpoint + Normal * Side * PromenadeCenterOffset;
+			AddBox(RiverPromenadeInstances,
+				FVector(WalkPlan.X, WalkPlan.Y, PromenadeTopZ * 0.5f),
+				FVector(Length, PromenadeWidth, PromenadeTopZ), Yaw);
+
+			const FVector GreenPlan = Midpoint + Normal * Side * GreenBankCenterOffset;
+			AddBox(RiverGreenBankInstances,
+				FVector(GreenPlan.X, GreenPlan.Y, SolCityGeneration::GroundZoneSurfaceZ * 0.5f),
+				FVector(Length, GreenBankWidth, SolCityGeneration::GroundZoneSurfaceZ), Yaw);
+
+			const float OuterEdgeOffset = WaterHalfWidth + WallWidth + PromenadeWidth + SolCityGeneration::CurbWidth * 0.5f;
+			const FVector EdgePlan = Midpoint + Normal * Side * OuterEdgeOffset;
+			AddBox(CurbInstances,
+				FVector(EdgePlan.X, EdgePlan.Y, SolCityGeneration::SidewalkSurfaceZ * 0.5f),
+				FVector(Length, SolCityGeneration::CurbWidth, SolCityGeneration::SidewalkSurfaceZ), Yaw);
+
+			// Leave an opening in the railing where the arterial bridge lands.
+			if (FMath::Abs(Midpoint.X) > 1250.0f)
+			{
+				for (const float RailZ : {PromenadeTopZ + 48.0f, PromenadeTopZ + 92.0f})
+				{
+					AddBox(RiverRailingInstances,
+						FVector(WallPlan.X, WallPlan.Y, RailZ),
+						FVector(Length, 7.0f, 7.0f), Yaw);
+				}
+				const FVector PostPlan = A + Normal * Side * WallCenterOffset;
+				AddBox(RiverRailingInstances,
+					FVector(PostPlan.X, PostPlan.Y, PromenadeTopZ + 50.0f),
+					FVector(9.0f, 9.0f, 100.0f), Yaw);
+			}
+		}
+	}
 }
 
 void ASolCityGenerator::AddRoadSegment(const FVector& Start, const FVector& End, float Width, ESolCityRoadClass RoadClass, bool bAddSidewalks, bool bBridge, bool bCreateVisual)
@@ -581,16 +664,23 @@ void ASolCityGenerator::AddRoadSegment(const FVector& Start, const FVector& End,
 		const FVector Direction = SolCityGeneration::SafeNormal2D(Delta);
 		const FVector Perpendicular(-Direction.Y, Direction.X, 0.0f);
 		const float SidewalkWidth = SolCityGeneration::SidewalkWidthForRoadClass(RoadClass);
-		const float Offset = Width * 0.5f + SidewalkWidth * 0.5f + 20.0f;
+		const float CurbOffset = Width * 0.5f + SolCityGeneration::CurbWidth * 0.5f;
+		const float Offset = Width * 0.5f + SolCityGeneration::CurbWidth + SidewalkWidth * 0.5f;
 		for (float Side : {-1.0f, 1.0f})
 		{
-			const FVector WalkCenter = (Start + End) * 0.5f + Perpendicular * Offset + FVector(0.0f, 0.0f, SolCityGeneration::SidewalkSurfaceZ * 0.5f);
+			const FVector CurbCenter = (Start + End) * 0.5f + Perpendicular * Side * CurbOffset +
+				FVector(0.0f, 0.0f, SolCityGeneration::SidewalkSurfaceZ * 0.5f);
+			const FVector SignedWalkCenter = (Start + End) * 0.5f + Perpendicular * Side * Offset +
+				FVector(0.0f, 0.0f, SolCityGeneration::SidewalkSurfaceZ * 0.5f);
 			if (bCreateVisual)
 			{
-				AddBox(bBridge ? BridgeInstances : SidewalkInstances, WalkCenter, FVector(Length, SidewalkWidth, SolCityGeneration::SidewalkSurfaceZ), Yaw);
+				AddBox(bBridge ? BridgeInstances : CurbInstances, CurbCenter,
+					FVector(Length, SolCityGeneration::CurbWidth, SolCityGeneration::SidewalkSurfaceZ), Yaw);
+				AddBox(bBridge ? BridgeInstances : SidewalkInstances, SignedWalkCenter,
+					FVector(Length, SidewalkWidth, SolCityGeneration::SidewalkSurfaceZ), Yaw);
 			}
-			PedestrianWaypoints.Add(Start + Perpendicular * Offset + FVector(0.0f, 0.0f, SolCityGeneration::SidewalkSurfaceZ));
-			PedestrianWaypoints.Add(End + Perpendicular * Offset + FVector(0.0f, 0.0f, SolCityGeneration::SidewalkSurfaceZ));
+			PedestrianWaypoints.Add(Start + Perpendicular * Side * Offset + FVector(0.0f, 0.0f, SolCityGeneration::SidewalkSurfaceZ));
+			PedestrianWaypoints.Add(End + Perpendicular * Side * Offset + FVector(0.0f, 0.0f, SolCityGeneration::SidewalkSurfaceZ));
 		}
 	}
 }
@@ -1113,6 +1203,17 @@ void ASolCityGenerator::GenerateBuildings()
 			BlockLotSettings.MaximumDepth = SolCityGeneration::StandardLaneWidth * 5.0f;
 			BlockLotSettings.SideSetback = SolCityGeneration::BuildingGap;
 		}
+		else if (Block.Centroid.Size() > HalfCity * 0.60f)
+		{
+			// Outer neighborhoods use fewer, wider parcels with deeper front and
+			// side yards. The building plate is reduced again at placement time.
+			BlockLotSettings.MinimumFrontage = SolCityGeneration::StandardLaneWidth * 3.0f;
+			BlockLotSettings.MaximumFrontage = SolCityGeneration::StandardLaneWidth * 5.4f;
+			BlockLotSettings.MinimumDepth = SolCityGeneration::StandardLaneWidth * 3.0f;
+			BlockLotSettings.MaximumDepth = SolCityGeneration::StandardLaneWidth * 4.8f;
+			BlockLotSettings.FrontSetback = SolCityGeneration::StandardLaneWidth * 1.05f;
+			BlockLotSettings.SideSetback = SolCityGeneration::StandardLaneWidth * 0.42f;
+		}
 		SolCityLotLayout::SubdivideBlockFrontages(Block, BlockIndex, Random, BlockLotSettings, LotsByBlock[BlockIndex]);
 
 		if (Block.Area < 6500000.0f || IsInsideRiver(Block.Centroid, 300.0f))
@@ -1184,7 +1285,8 @@ void ASolCityGenerator::GenerateBuildings()
 
 	int32 TaperedBuildingCount = 0;
 	int32 TwinTowerBuildingCount = 0;
-	auto TryPlaceBuilding = [this, HalfCity, &TaperedBuildingCount, &TwinTowerBuildingCount](
+	int32 OuterLowRiseCount = 0;
+	auto TryPlaceBuilding = [this, HalfCity, &TaperedBuildingCount, &TwinTowerBuildingCount, &OuterLowRiseCount](
 		const FVector2D& Candidate,
 		const FVector2D& RequestedFootprint,
 		float Yaw,
@@ -1218,7 +1320,7 @@ void ASolCityGenerator::GenerateBuildings()
 
 		UHierarchicalInstancedStaticMeshComponent* AuthoredGroup = nullptr;
 		UStaticMesh* AuthoredMesh = nullptr;
-		if (AcceptedIndex % SolCityGeneration::AuthoredBuildingInterval == 0)
+		if (Style != 4 && AcceptedIndex % SolCityGeneration::AuthoredBuildingInterval == 0)
 		{
 			switch ((AcceptedIndex / SolCityGeneration::AuthoredBuildingInterval) % 3)
 			{
@@ -1280,6 +1382,7 @@ void ASolCityGenerator::GenerateBuildings()
 			AddBuildingMass(Candidate, Footprint, Yaw, Style, Height);
 			TaperedBuildingCount += Style == 2 ? 1 : 0;
 			TwinTowerBuildingCount += Style == 5 ? 1 : 0;
+			OuterLowRiseCount += Style == 4 ? 1 : 0;
 			OccupiedExtent = SolCityGeneration::RotatedExtent2D(Footprint, Yaw);
 		}
 
@@ -1303,18 +1406,25 @@ void ASolCityGenerator::GenerateBuildings()
 				continue;
 			}
 			const SolCityLotLayout::FCityLot& Lot = LotsByBlock[BlockIndex][Layer];
-			const float CenterBias = 1.0f - FMath::Clamp(Lot.Center.Size() / HalfCity, 0.0f, 1.0f);
-			const float Height = Random.FRandRange(
-				SolCityGeneration::StandardLaneWidth * (2.8f + CenterBias * 2.2f),
-				SolCityGeneration::StandardLaneWidth * (5.5f + CenterBias * 12.5f));
-			int32 Style = Lot.bCornerLot ? 1 : Random.RandRange(0, 5);
+			const float NormalizedRadius = FMath::Clamp(Lot.Center.Size() / HalfCity, 0.0f, 1.0f);
+			const float CenterBias = 1.0f - NormalizedRadius;
+			const bool bOuterResidential = NormalizedRadius >= 0.62f;
+			const float Height = bOuterResidential
+				? Random.FRandRange(650.0f, 1050.0f)
+				: Random.FRandRange(
+					SolCityGeneration::StandardLaneWidth * (2.8f + CenterBias * 2.2f),
+					SolCityGeneration::StandardLaneWidth * (5.5f + CenterBias * 12.5f));
+			int32 Style = bOuterResidential ? 4 : (Lot.bCornerLot ? 1 : Random.RandRange(0, 5));
+			const FVector2D PlacementFootprint = bOuterResidential
+				? Lot.Footprint * FVector2D(0.66f, 0.62f)
+				: Lot.Footprint;
 			if (!Lot.bCornerLot && TwinTowerBuildingCount == 0 &&
-				Lot.Footprint.X * Lot.Footprint.Y >= 850000.0f && Height >= 1800.0f)
+				!bOuterResidential && PlacementFootprint.X * PlacementFootprint.Y >= 850000.0f && Height >= 1800.0f)
 			{
 				// Every deterministic city contains at least one landmark twin tower.
 				Style = 5;
 			}
-			if (TryPlaceBuilding(Lot.Center, Lot.Footprint, Lot.YawDegrees, Style, Height, Accepted))
+			if (TryPlaceBuilding(Lot.Center, PlacementFootprint, Lot.YawDegrees, Style, Height, Accepted))
 			{
 				++Accepted;
 			}
@@ -1349,14 +1459,25 @@ void ASolCityGenerator::GenerateBuildings()
 			const FVector2D FrontCenter = FMath::Lerp(Start, End, T);
 			for (const float Side : {-1.0f, 1.0f})
 			{
-				const FVector2D Footprint(
+				const FVector2D ParcelFootprint(
 					FMath::Clamp(Pitch * 0.78f, 600.0f, SolCityGeneration::MaximumBuildingFootprint),
 					Random.FRandRange(650.0f, 920.0f));
+				const bool bOuterResidential = FrontCenter.Size() / HalfCity >= 0.62f;
+				if (bOuterResidential && (SlotIndex + RoadIndex + (Side > 0.0f ? 1 : 0)) % 2 != 0)
+				{
+					continue;
+				}
+				const FVector2D Footprint = bOuterResidential
+					? ParcelFootprint * FVector2D(0.68f, 0.62f)
+					: ParcelFootprint;
 				const FVector2D Candidate = FrontCenter + Normal * Side * (
-					Segment.HalfWidth + SolCityGeneration::ProceduralRoadSetback + Footprint.Y * 0.5f + 45.0f);
+					Segment.HalfWidth + SolCityGeneration::ProceduralRoadSetback + ParcelFootprint.Y * 0.5f + 45.0f);
 				const float CenterBias = 1.0f - FMath::Clamp(Candidate.Size() / HalfCity, 0.0f, 1.0f);
-				const float Height = Random.FRandRange(1000.0f, 1700.0f + CenterBias * 1400.0f);
-				if (TryPlaceBuilding(Candidate, Footprint, Yaw, Random.RandRange(0, 5), Height, Accepted))
+				const float Height = bOuterResidential
+					? Random.FRandRange(650.0f, 1050.0f)
+					: Random.FRandRange(1000.0f, 1700.0f + CenterBias * 1400.0f);
+				const int32 Style = bOuterResidential ? 4 : Random.RandRange(0, 5);
+				if (TryPlaceBuilding(Candidate, Footprint, Yaw, Style, Height, Accepted))
 				{
 					++Accepted;
 					if (Accepted >= EffectiveTargetCount)
@@ -1368,8 +1489,8 @@ void ASolCityGenerator::GenerateBuildings()
 		}
 	}
 
-	UE_LOG(LogTemp, Display, TEXT("SolCity parcel layout: blocks=%d buildings=%d/%d parks=%d parking=%d courtyards=%d tapered=%d twinSkybridge=%d"),
-		Blocks.Num(), Accepted, EffectiveTargetCount, ParkCount, ParkingCount, CourtyardCount, TaperedBuildingCount, TwinTowerBuildingCount);
+	UE_LOG(LogTemp, Display, TEXT("SolCity parcel layout: blocks=%d buildings=%d/%d parks=%d parking=%d courtyards=%d tapered=%d twinSkybridge=%d outerLowRise=%d"),
+		Blocks.Num(), Accepted, EffectiveTargetCount, ParkCount, ParkingCount, CourtyardCount, TaperedBuildingCount, TwinTowerBuildingCount, OuterLowRiseCount);
 }
 
 float ASolCityGenerator::GetAuthoredBuildingUniformScale(UStaticMesh* Mesh) const
@@ -1449,13 +1570,14 @@ void ASolCityGenerator::AddBuildingMass(const FVector2D& Center, const FVector2D
 	{
 		return;
 	}
-	const int32 RequestedMidFloorCount = FMath::Max(1,
+	const int32 MinimumMidFloorCount = Style == 4 ? 0 : 1;
+	const int32 RequestedMidFloorCount = FMath::Max(MinimumMidFloorCount,
 		FMath::RoundToInt((Height - BaseModuleHeight - CrownModuleHeight) / MidModuleHeight));
 	const float MaximumHeightToWidthRatio = (Style == 2 || Style == 5) ? 3.20f : 2.60f;
-	const int32 AspectRatioFloorCap = FMath::Max(1, FMath::FloorToInt(
+	const int32 AspectRatioFloorCap = FMath::Max(MinimumMidFloorCount, FMath::FloorToInt(
 		(Footprint.GetMin() * MaximumHeightToWidthRatio - BaseModuleHeight - CrownModuleHeight) / MidModuleHeight));
-	const int32 StyleFloorCap = (Style == 2 || Style == 5) ? 16 : (Style == 4 ? 4 : 10);
-	const int32 MidFloorCount = FMath::Clamp(RequestedMidFloorCount, 1, FMath::Min(AspectRatioFloorCap, StyleFloorCap));
+	const int32 StyleFloorCap = (Style == 2 || Style == 5) ? 16 : (Style == 4 ? 2 : 10);
+	const int32 MidFloorCount = FMath::Clamp(RequestedMidFloorCount, MinimumMidFloorCount, FMath::Min(AspectRatioFloorCap, StyleFloorCap));
 	float HighestRoofZ = BaseModuleHeight + MidFloorCount * MidModuleHeight;
 	FVector2D RoofFootprint = Footprint;
 	FVector2D RoofLocalOffset = FVector2D::ZeroVector;
@@ -1655,7 +1777,7 @@ void ASolCityGenerator::AddBuildingMass(const FVector2D& Center, const FVector2D
 			const float Alpha = (HouseIndex + 0.5f) / HouseCount - 0.5f;
 			const FVector2D HouseOffset(Alpha * Footprint.X, 0.0f);
 			const FVector2D HouseFootprint(Footprint.X / HouseCount - SolCityGeneration::StandardLaneWidth * 0.08f, Footprint.Y);
-			const int32 HouseMidFloorCount = FMath::Clamp(MidFloorCount + Random.RandRange(-1, 1), 1, 4);
+			const int32 HouseMidFloorCount = FMath::Clamp(MidFloorCount + Random.RandRange(-1, 1), 0, 2);
 			AddStack(BuildingBaseModuleInstances, BuildingBaseModuleMesh, HouseOffset, HouseFootprint, 0.0f, 1);
 			AddStack(BuildingMiddleModuleInstances, BuildingMiddleModuleMesh, HouseOffset, HouseFootprint * FVector2D(0.92f, 0.92f), BaseModuleHeight, HouseMidFloorCount);
 			const float HouseRoofZ = BaseModuleHeight + HouseMidFloorCount * MidModuleHeight;
@@ -1769,12 +1891,36 @@ void ASolCityGenerator::GenerateTrees()
 	}
 	const FBox Bounds = AuthoredTreeMesh->GetBoundingBox();
 	const float HalfCity = CityDiameter * 0.5f - 450.0f;
-	const int32 TargetTrees = FMath::Clamp(FMath::RoundToInt(CityDiameter / 180.0f), 90, 220);
+	const int32 TargetTrees = FMath::Clamp(FMath::RoundToInt(CityDiameter / 100.0f), 240, 480);
+	TArray<FVector2D> PlacedTrees;
+	PlacedTrees.Reserve(TargetTrees);
 	int32 Added = 0;
-	for (int32 Attempt = 0; Attempt < TargetTrees * 25 && Added < TargetTrees; ++Attempt)
+	for (int32 Attempt = 0; Attempt < TargetTrees * 40 && Added < TargetTrees; ++Attempt)
 	{
 		const FVector2D Candidate(Random.FRandRange(-HalfCity, HalfCity), Random.FRandRange(-HalfCity, HalfCity));
-		if (IsInsideRiver(Candidate, 180.0f) || !IsNearRoad(Candidate, 860.0f) || IsNearRoad(Candidate, 430.0f))
+		const float NormalizedRadius = Candidate.Size() / FMath::Max(HalfCity, 1.0f);
+		const bool bOuterNeighborhood = NormalizedRadius >= 0.58f;
+		if (!bOuterNeighborhood && Random.FRand() < 0.58f)
+		{
+			continue;
+		}
+		const float MinimumRoadDistance = bOuterNeighborhood ? 300.0f : 420.0f;
+		const float MaximumRoadDistance = bOuterNeighborhood ? 1120.0f : 900.0f;
+		if (IsInsideRiver(Candidate, 520.0f) || !IsNearRoad(Candidate, MaximumRoadDistance) || IsNearRoad(Candidate, MinimumRoadDistance))
+		{
+			continue;
+		}
+		const float MinimumTreeSpacing = bOuterNeighborhood ? 270.0f : 360.0f;
+		bool bTooCloseToTree = false;
+		for (const FVector2D& ExistingTree : PlacedTrees)
+		{
+			if (FVector2D::DistSquared(Candidate, ExistingTree) < FMath::Square(MinimumTreeSpacing))
+			{
+				bTooCloseToTree = true;
+				break;
+			}
+		}
+		if (bTooCloseToTree)
 		{
 			continue;
 		}
@@ -1797,6 +1943,7 @@ void ASolCityGenerator::GenerateTrees()
 		const FVector Scale(UniformScale);
 		const FVector DesiredCenter(Candidate.X, Candidate.Y, Bounds.GetSize().Z * UniformScale * 0.5f);
 		TreeInstances->AddInstance(FTransform(Rotation, DesiredCenter - Rotation.RotateVector(Bounds.GetCenter() * Scale), Scale));
+		PlacedTrees.Add(Candidate);
 		++Added;
 	}
 }
