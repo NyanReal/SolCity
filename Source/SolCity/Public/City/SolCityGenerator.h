@@ -75,6 +75,9 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Sol City|Navigation")
 	TArray<FVector> GetTrafficSignalLocations() const { return TrafficSignalLocations; }
 
+	UFUNCTION(BlueprintPure, Category = "Sol City|Railway")
+	TArray<FVector> GetRailwayPathWaypoints() const { return RailwayPathWaypoints; }
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sol City|Generation")
 	int32 Seed = 71527;
 
@@ -207,6 +210,15 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sol City|Bridge")
 	TObjectPtr<UStaticMesh> AuthoredBridgeMesh;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sol City|Railway")
+	TObjectPtr<UStaticMesh> RailwayTrackMesh;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sol City|Railway")
+	TObjectPtr<UStaticMesh> RailwayBridgeMesh;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sol City|Railway")
+	TObjectPtr<UStaticMesh> RailwayTrainMesh;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sol City|Foliage")
 	TObjectPtr<UStaticMesh> AuthoredTreeMesh;
 
@@ -255,6 +267,9 @@ public:
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Sol City|Navigation")
 	TArray<FVector> TrafficSignalLocations;
 
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Sol City|Railway")
+	TArray<FVector> RailwayPathWaypoints;
+
 protected:
 	virtual void BeginPlay() override;
 
@@ -263,6 +278,14 @@ private:
 	{
 		FVector2D Center = FVector2D::ZeroVector;
 		FVector2D Extent = FVector2D::ZeroVector;
+	};
+
+	struct FRailwaySegment
+	{
+		FVector Start = FVector::ZeroVector;
+		FVector End = FVector::ZeroVector;
+		float HalfWidth = 520.0f;
+		bool bBridge = false;
 	};
 
 	UPROPERTY(VisibleAnywhere, Category = "Sol City")
@@ -319,6 +342,9 @@ private:
 	TArray<TObjectPtr<UHierarchicalInstancedStaticMeshComponent>> MegaSkyscraperInstances;
 	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> BridgeInstances;
 	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> AuthoredBridgeInstances;
+	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> RailwayTrackInstances;
+	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> RailwayBridgeInstances;
+	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> RailwayTrainInstances;
 	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> JunctionInstances;
 	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> TreeInstances;
 	TArray<TObjectPtr<UHierarchicalInstancedStaticMeshComponent>> ConiferInstances;
@@ -337,6 +363,7 @@ private:
 	TObjectPtr<UProceduralMeshComponent> WaterSurfaceMesh;
 
 	TArray<FBuildingFootprint> OccupiedBuildings;
+	TArray<FRailwaySegment> RailwaySegments;
 	TArray<FVector2D> JunctionCapLocations;
 	FRandomStream Random;
 	float WaterTime = 0.0f;
@@ -355,6 +382,7 @@ private:
 
 	void GenerateGroundAndRiver();
 	void GenerateRoadHierarchy();
+	void GenerateRailway();
 	void GenerateDistrictSurfaces();
 	void GenerateBuildings();
 	void GenerateTrees();
@@ -369,6 +397,7 @@ private:
 	void AddSplineRoadVisual(const TArray<FVector>& Points, float Width);
 	void AddRoadMarkings(const FVector& Start, const FVector& End, float Width, ESolCityRoadClass RoadClass, bool bBridge);
 	void AddJunctionCap(const FVector& Position, float Width, ESolCityRoadClass RoadClass);
+	void AddRailwaySegment(const FVector& Start, const FVector& End, bool bBridge);
 	void AddBuildingMass(const FVector2D& Center, const FVector2D& Footprint, float YawDegrees, int32 Style, float Height);
 	bool AddAuthoredBuilding(
 		UHierarchicalInstancedStaticMeshComponent* Group,
@@ -385,5 +414,6 @@ private:
 	bool IsBuildingSiteFree(const FVector2D& Center, const FVector2D& Extent) const;
 	bool IsBuildingClearOfRoads(const FVector2D& Center, const FVector2D& LocalSize, float YawDegrees) const;
 	bool IsNearRoad(const FVector2D& Point, float MaxDistance) const;
+	bool IsNearRailway(const FVector2D& Point, float MaxDistance) const;
 	float DistanceToSegment2D(const FVector2D& Point, const FVector2D& A, const FVector2D& B) const;
 };
