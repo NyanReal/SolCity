@@ -202,14 +202,16 @@ void ASolCityGameMode::BeginPlay()
 	{
 		if (UVolumetricCloudComponent* CloudComponent = Cloud->FindComponentByClass<UVolumetricCloudComponent>())
 		{
-			CloudComponent->SetLayerBottomAltitude(5.0f);
-			CloudComponent->SetLayerHeight(8.0f);
+			// Broad, graphic cloud masses suit the simplified city silhouettes better
+			// than the engine preset's dense, high-frequency cumulus field.
+			CloudComponent->SetLayerBottomAltitude(4.5f);
+			CloudComponent->SetLayerHeight(5.5f);
 			CloudComponent->SetGroundAlbedo(FColor(110, 138, 102));
 			CloudComponent->SetSkyLightCloudBottomOcclusion(0.18f);
-			CloudComponent->SetViewSampleCountScale(0.75f);
-			CloudComponent->SetShadowViewSampleCountScale(0.75f);
+			CloudComponent->SetViewSampleCountScale(0.65f);
+			CloudComponent->SetShadowViewSampleCountScale(0.5f);
 			CloudComponent->SetbUsePerSampleAtmosphericLightTransmittance(true);
-			CloudComponent->SetMaterial(TryLoadMaterial(TEXT("/Engine/EngineSky/VolumetricClouds/m_SimpleVolumetricCloud_Inst.m_SimpleVolumetricCloud_Inst")));
+			CloudComponent->SetMaterial(TryLoadMaterial(TEXT("/Game/Art/Environment/MI_SolCity_StylizedClouds.MI_SolCity_StylizedClouds")));
 		}
 	}
 	if (ASkyLight* Sky = ReuseOrSpawnEnvironmentActor<ASkyLight>(World, TEXT("Sky Light")))
