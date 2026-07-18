@@ -14,3 +14,5 @@ __pycache__/
 
 # Local vendor checkout and Python runtimes used to drive Blender MCP.
 Tools/blender-mcp-server/
+/Release
+/Build
