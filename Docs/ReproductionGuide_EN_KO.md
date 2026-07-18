@@ -28,7 +28,7 @@ The generated result includes:
 - An irregular hierarchy of 1-lane local roads, 2-lane collectors, and 4-lane arterials/bridges.
 - Separate raised sidewalks and 20 cm curbs, with curb and sidewalk intervals removed inside intersections.
 - A continuous river ribbon with retaining walls, riverside walks, railings, green banks, and bridge transitions.
-- A double-track perimeter railway with two river crossings, truss rail bridges, and two moving four-car commuter consists.
+- A double-track perimeter railway with two river crossings, truss rail bridges, two moving four-car commuter consists, and animated at-grade crossing barriers.
 - Continuous district underlays plus slightly overlapping zoning tiles, eliminating the old dark grid gaps between grass cells.
 - Road-derived city blocks and parcels rather than point-only building scatter.
 - Pedestrian-only interior mews that fill eligible oversized outer blocks with inward-facing low-rise homes.
@@ -41,14 +41,15 @@ The validated default-seed runtime snapshot from 2026-07-19 is:
 
 ```text
 blocks=113 buildings=1500/1500 parks=8 parking=9 courtyards=9 interiorMews=16 interiorHomes=78
-tapered=203 twinSkybridge=4 megaCBD=5 outerLowRise=757
+tapered=194 twinSkybridge=4 megaCBD=5 outerLowRise=754
 authored suburban=244 authored megaCBD=4
 billboards=48 skybridges=7
-trees=1073 conifers=527 curbs=1366
+trees=1068 conifers=532 curbs=1366
 railway segments=352 trackMeshes=342 bridgeMeshes=10 consists=2 trainCars=8
+level crossings=22 barrierBases=44 barrierBooms=44
 ```
 
-Counts can change when the seed, target count, city diameter, or available assets change. The invariants are successful target completion, four authored mega-CBD landmarks when their assets are available, visible skybridges, four billboard material variants, a closed perimeter railway with both river crossings bridged, and no HISM material-usage errors.
+Counts can change when the seed, target count, city diameter, or available assets change. The invariants are successful target completion, four authored mega-CBD landmarks when their assets are available, visible skybridges, four billboard material variants, a closed perimeter railway with both river crossings bridged, paired animated barriers at every detected at-grade road crossing, and no HISM material-usage errors.
 
 ### 2. Required software and checkout
 
@@ -127,12 +128,14 @@ Current expansion kits:
 | `SM_SolCity_DoubleTrack_01` | one double-track module | `12.000 x 8.250 x 0.590 m` |
 | `SM_SolCity_RailBridge_01` | one double-track truss module | `12.000 x 9.100 x 6.330 m` |
 | `SM_SolCity_CommuterTrain_01` | one reusable commuter car | `34.190 x 3.430 x 5.360 m` |
+| `SM_SolCity_LevelCrossingBarrierBase_01` | one reusable cabinet, warning light, and crossbuck assembly | `0.924 x 0.860 x 2.832 m` |
+| `SM_SolCity_LevelCrossingBarrierBoom_01` | one independently rotating hinge-pivot boom | `6.880 x 0.380 x 0.460 m` |
 | `SM_SolCity_MegaSkyscrapers_01` | `SM_SolCity_MegaGlassCurtainwall_01` | `48.000 x 42.425 x 225.000 m` |
 |  | `SM_SolCity_MegaNewYorkSetback_01` | `52.000 x 44.700 x 228.500 m` |
 |  | `SM_SolCity_MegaGeometricTwist_01` | `49.889 x 52.336 x 223.500 m` |
 |  | `SM_SolCity_MegaPodiumCrown_01` | `56.000 x 54.500 x 227.500 m` |
 
-All listed meshes validate with non-degenerate bounds and `minZ = 0` after clean FBX re-import. The repository-wide commit-friendly preview gallery is `Content/Art/PreviewGallery/`; it currently contains copies of all 23 `_preview.png` files while the authoritative previews remain beside their source assets.
+All listed meshes validate with non-degenerate bounds after clean FBX re-import. Grounded assets have `minZ = 0`; the barrier boom intentionally spans `Z = -0.23..0.23 m` around its hinge origin. The repository-wide commit-friendly preview gallery is `Content/Art/PreviewGallery/`; it currently contains copies of all 25 `_preview.png` files while the authoritative previews remain beside their source assets.
 
 Import the house, conifer, and mega-tower kits with **Combine Meshes = false**. Import the voxel cat with **Combine Meshes = true**. Generate lightmap UVs and automatic collision.
 
@@ -161,15 +164,18 @@ Checked-in Unreal assets normally require no setup. To reconstruct assets from s
 6. `Content/Python/ImportSolCityUrbanProps.py`
 7. `Content/Python/ImportSolCityExpansionAssets.py`
 8. `Content/Python/ImportSolCityRailwayAssets.py`
-9. `Content/Python/SetupSolCityBillboard.py`
-10. `Content/Python/CreateSolCitySplineMaterials.py`
-11. `Content/Python/SetupSolCityBuildingMaterials.py`
-12. `Content/Python/FinalizeSolCityMaterials.py`
-13. `Content/Python/TuneSolCityEnvironment.py`
+9. `Content/Python/ImportSolCityLevelCrossingAssets.py`
+10. `Content/Python/SetupSolCityBillboard.py`
+11. `Content/Python/CreateSolCitySplineMaterials.py`
+12. `Content/Python/SetupSolCityBuildingMaterials.py`
+13. `Content/Python/FinalizeSolCityMaterials.py`
+14. `Content/Python/TuneSolCityEnvironment.py`
 
 `ImportSolCityExpansionAssets.py` imports 11 meshes: four houses, two conifers, four mega towers, and one voxel cat. It also enables instanced-static-mesh usage on imported base materials.
 
 `ImportSolCityRailwayAssets.py` imports the double-track, rail-bridge, and commuter-train FBXs and creates the railway/train materials under `/Game/Art/Props`. The script is idempotent and skips assets that already exist. UE 5.7 unattended Interchange can terminate with a `SlateApplication.h` assertion after an FBX has already been saved; prefer **Tools > Execute Python Script**, or rerun the commandlet one asset/process at a time until all three `.uasset` files exist.
+
+`ImportSolCityLevelCrossingAssets.py` imports the barrier base and separate hinge-origin boom, enables combined meshes, lightmap UV generation, and collision, and creates `M_Crossing_WarningSignal`. The signal material reads HISM custom-data float `0`: `0` is emissive green and `1` is emissive red. The generator overrides only the authored warning-light slot at runtime, so the source mesh remains reusable. The source `.blend`, `.fbx`, and preview PNG files remain beside the imported props.
 
 `SetupSolCityBillboard.py` imports the billboard, four language-free ad textures, one two-sided HISM-compatible master, and four swappable material instances. The mesh uses frame slot `0` and ad slot `1`. The script currently contains `PROJECT = Path(r"D:\github\SolCity")`; change that value when the checkout is elsewhere.
 
@@ -193,7 +199,7 @@ unreal.SolCityLandscapeLibrary.rebuild_sol_city_landscape(144000.0, 6000.0, -90.
 2. Create HISM and spline instance groups.
 3. Generate ground, river, banks, walls, walks, rails, and distant transitions.
 4. Generate the complete road hierarchy.
-5. Generate the perimeter railway, rail bridges, and trains.
+5. Generate the perimeter railway, rail bridges, trains, and detected at-grade crossing barriers.
 6. Generate curb and sidewalk strips after all roads are known.
 7. Generate district surfaces.
 8. Reserve and place traffic furniture, including billboards.
@@ -218,7 +224,9 @@ The zoning system creates continuous residential underlays first, then residenti
 
 Before ordinary frontage placement, eligible oversized outer blocks receive a 150 cm pedestrian mews from an existing roadside sidewalk into the block. One-story homes are tested on both sides with their authored `-Y` entrance facing the mews. Polygon corners, river samples, roads, railway, existing occupancy, and candidate OBB overlaps are rejected. The path, entrance spurs, pedestrian waypoint pair, and reserved corridor are committed only when at least two homes place successfully.
 
-The railway is a deterministic closed ellipse inside the city edge. Segment count follows circumference and is clamped to `96..520`. Both crossings of the meandering river use the truss bridge mesh at a `420 cm` running surface, with smooth `1,900 cm` approaches down to the `59 cm` ground-running surface. Two four-car consists run in opposite directions on opposite tracks. Every car samples its own cumulative route distance, so the cars keep the authored length plus an `80 cm` coupler gap and align independently to curves and bridge grades. Default speed is `1,800 cm/s` (`64.8 km/h`). Buildings use the railway segments as clearance geometry, trees reject nearby candidates, and `GetRailwayPathWaypoints()` exposes the closed route.
+The railway is a deterministic closed ellipse inside the city edge. Segment count follows circumference and is clamped to `96..520`. Both crossings of the meandering river use the truss bridge mesh at a `420 cm` running surface, with smooth `1,900 cm` approaches down to the `59 cm` ground-running surface. Two four-car consists run in opposite directions on opposite tracks. Every car samples its own cumulative route distance, so the cars keep the authored length plus an `80 cm` coupler gap and align independently to curves and bridge grades. Position stays on the authored polyline while a centered chord supplies the tangent; a world-up quaternion removes segment-boundary yaw snaps, reverse twitches, and the loop-seam discontinuity. Default speed is `1,800 cm/s` (`64.8 km/h`). Buildings, open-space props, mews, billboards, trees, conifers, and traffic furniture test their real rotated footprints against railway clearance, and `GetRailwayPathWaypoints()` exposes the closed route.
+
+At-grade crossing generation intersects ground-level railway and road segments in 2D, rejects rail bridges, road bridges, parallel segments, duplicate intersections within `900 cm`, and vertical separation above `140 cm`. Each accepted crossing places one barrier on each roadway approach, with the cabinet outside the curb and a separately instanced boom directed toward the road center. Boom X scale expands only when required for wider roads. The lamps change from green to red `12,000 cm` before arrival, while the boom deliberately waits until `9,000 cm` before arrival to start closing. It stays red and closed until the last of the four cars plus `1,200 cm` clearance has passed. The boom then opens at normalized speed `0.75/s`, and the lamps return to green only after it reaches the fully raised `82 degree` angle. These values are editable under **Sol City > Railway > Level Crossing**.
 
 Procedural building styles are:
 
@@ -256,7 +264,7 @@ Camera defaults:
 | Free-flight speed range | `500..30,000 cm/s` |
 | Free-flight pitch | `-89..89 degrees` |
 
-Use `W A S D` to pan, RMB drag to rotate/change pitch, the wheel to zoom, and `F` to toggle free flight. `T` toggles railway time: the two train consists pause in place and resume from the same cumulative route distance while water, road traffic, and the rest of the city continue. In free flight use `Q/E` for down/up and the wheel to change speed. Returning from free flight restores the saved city transform, arm rotation, current arm length, and desired zoom.
+Use `W A S D` to pan, RMB drag to rotate/change pitch, the wheel to zoom, and `F` to toggle free flight. `T` toggles railway time: the two train consists pause in place and resume from the same cumulative route distance while water, road traffic, and the rest of the city continue. Crossing barriers keep evaluating the stopped consist and finish opening or closing, so a train paused in the approach zone remains safely protected. In free flight use `Q/E` for down/up and the wheel to change speed. Returning from free flight restores the saved city transform, arm rotation, current arm length, and desired zoom.
 
 The runtime creates or reuses Sky Atmosphere, directional sun, Sky Light, Exponential Height Fog, Volumetric Cloud, and an unbound Post Process Volume. It uses manual exposure, AO `0.45`, AO radius `120`, AO power `1.2`, saturation `0.97`, contrast `1.02`, bloom `0.25`, and bloom threshold `1.4`. A large collisionless, shadowless plane at `Z = -280 cm` hides the finite-world edge behind height fog.
 
@@ -286,6 +294,7 @@ Inspect `Saved/Logs/SolCity.log` for:
 - `SolCity authored modules`
 - `SolCity streetscape`
 - `SolCity perimeter railway`
+- `SolCity level crossings`
 
 There must be no `missing bUsedWithInstancedStaticMeshes`, `Default Material will be used`, Python traceback, assertion, or fatal error.
 
@@ -304,6 +313,8 @@ Visual PIE verification:
 - Oversized outer blocks that receive interior homes also receive a narrow pedestrian mews, and the house entrances face it.
 - Every tapered upper module is contained by the actual supporting module bounds, not only by its requested parcel rectangle.
 - River water, green bank, retaining wall, promenade, rail, bridge, and concrete transitions do not leave open gaps.
+- Every ground-level road/rail crossing has two cabinets outside the road edge. Its lamps turn red before boom motion begins, the separate booms remain down through the fourth car, and the lamps return to green only when the booms are fully raised.
+- Trains rotate continuously through every polyline corner and the loop seam without a brief reverse-yaw twitch.
 
 For each regenerated Blender asset, also inspect its `_preview.png` and repeat the clean Blender 5.2 FBX import validation before accepting it.
 
@@ -331,7 +342,7 @@ For each regenerated Blender asset, also inspect its `_preview.png` and repeat t
 - 1차로 골목길, 2차로 집산도로, 4차로 간선도로와 교량으로 구성된 비정형 도로 계층.
 - 차도보다 높은 별도 인도와 20cm 경석. 교차로 내부에는 경석과 인도를 생성하지 않는다.
 - 하나로 이어진 강, 옹벽, 강변 산책로, 난간, 녹지 둔치와 교량 진입부.
-- 도시 외곽을 닫힌 경로로 순환하는 복선 철도, 강을 두 번 건너는 트러스 철교와 운행하는 4량 통근열차 편성 2개.
+- 도시 외곽을 닫힌 경로로 순환하는 복선 철도, 강을 두 번 건너는 트러스 철교, 운행하는 4량 통근열차 편성 2개와 움직이는 평면 건널목 차단기.
 - 연속 지면 받침과 서로 약간 겹치는 용도지역 셀. 예전 녹지 격자 틈은 제거됐다.
 - 포인트 산포가 아니라 도로에서 추출한 도시 블록과 대지 필지에 따른 건물 배치.
 - 큰 외곽 블록 내부를 보행 전용 좁은 길과 길을 향한 저층 주택으로 채우는 mews 배치.
@@ -344,14 +355,15 @@ For each regenerated Blender asset, also inspect its `_preview.png` and repeat t
 
 ```text
 blocks=113 buildings=1500/1500 parks=8 parking=9 courtyards=9 interiorMews=16 interiorHomes=78
-tapered=203 twinSkybridge=4 megaCBD=5 outerLowRise=757
+tapered=194 twinSkybridge=4 megaCBD=5 outerLowRise=754
 authored suburban=244 authored megaCBD=4
 billboards=48 skybridges=7
-trees=1073 conifers=527 curbs=1366
+trees=1068 conifers=532 curbs=1366
 railway segments=352 trackMeshes=342 bridgeMeshes=10 consists=2 trainCars=8
+level crossings=22 barrierBases=44 barrierBooms=44
 ```
 
-시드, 목표 건물 수, 도시 크기나 로드 가능한 에셋이 바뀌면 정확한 수치는 달라질 수 있다. 목표 건물 수 달성, authored 초대형 CBD 4종, 보이는 공중 연결부, 광고 재질 4종, 강 양쪽 횡단부에 철교가 있는 닫힌 외곽 순환 철도와 HISM 재질 오류 0건을 핵심 불변 조건으로 본다.
+시드, 목표 건물 수, 도시 크기나 로드 가능한 에셋이 바뀌면 정확한 수치는 달라질 수 있다. 목표 건물 수 달성, authored 초대형 CBD 4종, 보이는 공중 연결부, 광고 재질 4종, 강 양쪽 횡단부에 철교가 있는 닫힌 외곽 순환 철도, 감지된 모든 평면 도로 교차점의 양방향 차단기와 HISM 재질 오류 0건을 핵심 불변 조건으로 본다.
 
 ### 2. 필수 소프트웨어와 체크아웃
 
@@ -430,12 +442,14 @@ SM_SolCity_<Name>_01_preview.png
 | `SM_SolCity_DoubleTrack_01` | 복선 모듈 1개 | `12.000 x 8.250 x 0.590 m` |
 | `SM_SolCity_RailBridge_01` | 복선 트러스 철교 모듈 1개 | `12.000 x 9.100 x 6.330 m` |
 | `SM_SolCity_CommuterTrain_01` | 재사용 통근열차 차량 1량 | `34.190 x 3.430 x 5.360 m` |
+| `SM_SolCity_LevelCrossingBarrierBase_01` | 제어함·경고등·크로스벅 일체형 본체 1개 | `0.924 x 0.860 x 2.832 m` |
+| `SM_SolCity_LevelCrossingBarrierBoom_01` | 힌지 원점에서 독립 회전하는 차단봉 1개 | `6.880 x 0.380 x 0.460 m` |
 | `SM_SolCity_MegaSkyscrapers_01` | `SM_SolCity_MegaGlassCurtainwall_01` | `48.000 x 42.425 x 225.000 m` |
 |  | `SM_SolCity_MegaNewYorkSetback_01` | `52.000 x 44.700 x 228.500 m` |
 |  | `SM_SolCity_MegaGeometricTwist_01` | `49.889 x 52.336 x 223.500 m` |
 |  | `SM_SolCity_MegaPodiumCrown_01` | `56.000 x 54.500 x 227.500 m` |
 
-모든 메시가 clean FBX 재임포트에서 정상 바운드와 `minZ = 0`을 통과했다. 저장소 전체의 커밋 가능한 프리뷰 갤러리는 `Content/Art/PreviewGallery/`이며, 현재 `_preview.png` 23개를 모두 복사해 두었다. 원본 프리뷰는 각 소스 에셋 옆에 그대로 유지한다.
+모든 메시가 clean FBX 재임포트에서 정상 바운드를 통과했다. 지면형 에셋은 `minZ = 0`이고, 차단봉만 힌지 원점 중심으로 의도적으로 `Z = -0.23..0.23 m` 범위를 가진다. 저장소 전체의 커밋 가능한 프리뷰 갤러리는 `Content/Art/PreviewGallery/`이며, 현재 `_preview.png` 25개를 모두 복사해 두었다. 원본 프리뷰는 각 소스 에셋 옆에 그대로 유지한다.
 
 주택·침엽수·초대형 타워 키트는 **Combine Meshes = false**, 복셀 고양이는 **Combine Meshes = true**로 임포트한다. 라이트맵 UV와 자동 충돌을 생성한다.
 
@@ -464,15 +478,18 @@ SM_SolCity_<Name>_01_preview.png
 6. `Content/Python/ImportSolCityUrbanProps.py`
 7. `Content/Python/ImportSolCityExpansionAssets.py`
 8. `Content/Python/ImportSolCityRailwayAssets.py`
-9. `Content/Python/SetupSolCityBillboard.py`
-10. `Content/Python/CreateSolCitySplineMaterials.py`
-11. `Content/Python/SetupSolCityBuildingMaterials.py`
-12. `Content/Python/FinalizeSolCityMaterials.py`
-13. `Content/Python/TuneSolCityEnvironment.py`
+9. `Content/Python/ImportSolCityLevelCrossingAssets.py`
+10. `Content/Python/SetupSolCityBillboard.py`
+11. `Content/Python/CreateSolCitySplineMaterials.py`
+12. `Content/Python/SetupSolCityBuildingMaterials.py`
+13. `Content/Python/FinalizeSolCityMaterials.py`
+14. `Content/Python/TuneSolCityEnvironment.py`
 
 `ImportSolCityExpansionAssets.py`는 주택 4, 침엽수 2, 초대형 타워 4, 복셀 고양이 1개로 총 11개 메시를 임포트한다. 가져온 기본 재질에는 Instanced Static Mesh 사용 플래그도 설정한다.
 
 `ImportSolCityRailwayAssets.py`는 복선, 철교와 통근열차 FBX를 임포트하고 `/Game/Art/Props`에 철도·열차 재질을 만든다. 스크립트는 재실행 가능하며 이미 존재하는 에셋은 건너뛴다. UE 5.7 무인 Interchange는 FBX 저장을 마친 직후 `SlateApplication.h` assertion으로 종료될 수 있다. **Tools > Execute Python Script** 실행을 우선하고, commandlet을 써야 한다면 세 `.uasset`이 모두 생길 때까지 한 프로세스당 한 에셋씩 재실행한다.
+
+`ImportSolCityLevelCrossingAssets.py`는 차단기 본체와 힌지 원점을 가진 분리 차단봉을 임포트하고 Combine Meshes·라이트맵 UV·충돌을 설정하며 `M_Crossing_WarningSignal`을 만든다. 신호 재질은 HISM custom-data float `0`을 읽으며 `0`은 발광 초록색, `1`은 발광 빨간색이다. 생성기는 런타임에 authored 경고등 슬롯만 이 재질로 오버라이드하므로 원본 메시의 재사용성을 유지한다. 원본 `.blend`, `.fbx`, 프리뷰 PNG는 임포트된 프랍 옆에 유지한다.
 
 `SetupSolCityBillboard.py`는 광고판, 언어 없는 광고 텍스처 4종, 양면/HISM 호환 마스터 재질과 교체 가능한 인스턴스 4종을 만든다. 메시의 프레임은 슬롯 `0`, 광고면은 슬롯 `1`이다. 현재 스크립트에는 `PROJECT = Path(r"D:\github\SolCity")`가 있으므로 다른 위치에 체크아웃했다면 이 값을 수정한다.
 
@@ -496,7 +513,7 @@ unreal.SolCityLandscapeLibrary.rebuild_sol_city_landscape(144000.0, 6000.0, -90.
 2. HISM과 스플라인 인스턴스 그룹 생성.
 3. 지면, 강, 둔치, 옹벽, 산책로, 난간과 원거리 전환부 생성.
 4. 전체 도로 계층 생성.
-5. 외곽 순환 철도, 철교와 열차 생성.
+5. 외곽 순환 철도, 철교, 열차와 감지된 평면 건널목 차단기 생성.
 6. 모든 도로가 확정된 뒤 경석과 인도 스트립 생성.
 7. 용도지역 지면 생성.
 8. 광고판을 포함한 교통·도시 프랍의 위치 선점과 배치.
@@ -521,7 +538,9 @@ unreal.SolCityLandscapeLibrary.rebuild_sol_city_landscape(144000.0, 6000.0, -90.
 
 일반 도로 전면 배치 전에 조건을 만족하는 큰 외곽 블록에는 기존 도로 인도에서 블록 내부로 들어가는 폭 150cm의 보행 전용 mews를 만든다. 양쪽 단층 주택은 authored `-Y` 출입구가 mews를 향하도록 배치한다. 블록 모서리, 강의 시작·중앙·끝 표본, 도로, 철도, 기존 점유와 후보 OBB 충돌을 검사한다. 주택이 최소 2채 이상 성공한 경우에만 본선·현관 연결 보도, 보행 웨이포인트 쌍과 예약 회랑을 확정한다.
 
-철도는 도시 경계 안쪽의 결정적인 닫힌 타원 경로다. 선분 수는 둘레에 비례하며 `96..520` 범위다. 굽은 강을 지나는 두 횡단부는 주행면 `420 cm`의 트러스 철교를 사용하고, 길이 `1,900 cm`의 완만한 진입 경사로 지상 주행면 `59 cm`에 연결한다. 4량 편성 2개가 서로 반대 선로에서 반대 방향으로 운행한다. 각 차량은 루프 누적 거리를 별도로 샘플링하므로 authored 차량 길이에 `80 cm` 연결 간격을 더한 간격을 유지하면서 곡선과 철교 경사에 개별 정렬된다. 기본 속도는 `1,800 cm/s`(`64.8 km/h`)다. 건물은 철도 선분을 이격 형상으로 사용하고 나무도 철도 주변 후보를 거부한다. 닫힌 경로는 `GetRailwayPathWaypoints()`로 제공한다.
+철도는 도시 경계 안쪽의 결정적인 닫힌 타원 경로다. 선분 수는 둘레에 비례하며 `96..520` 범위다. 굽은 강을 지나는 두 횡단부는 주행면 `420 cm`의 트러스 철교를 사용하고, 길이 `1,900 cm`의 완만한 진입 경사로 지상 주행면 `59 cm`에 연결한다. 4량 편성 2개가 서로 반대 선로에서 반대 방향으로 운행한다. 각 차량은 루프 누적 거리를 별도로 샘플링하므로 authored 차량 길이에 `80 cm` 연결 간격을 더한 간격을 유지하면서 곡선과 철교 경사에 개별 정렬된다. 위치는 기존 폴리라인 위에 유지하되 중심 차분 chord로 접선을 만들고 world-up 쿼터니언 회전을 사용하므로 선분 경계의 yaw 스냅, 미세 역회전과 루프 이음새 불연속이 없다. 기본 속도는 `1,800 cm/s`(`64.8 km/h`)다. 건물·개방 공간 프랍·mews·광고판·나무·침엽수·교통 시설은 실제 회전 바닥 형상으로 철도 이격을 검사한다. 닫힌 경로는 `GetRailwayPathWaypoints()`로 제공한다.
+
+평면 건널목 생성기는 지상 철도와 도로 선분을 2D로 교차 검사한다. 철교·도로교·평행 선분·`900 cm` 안의 중복 교차점과 높이 차가 `140 cm`를 넘는 입체교차는 제외한다. 유효한 건널목마다 도로 양쪽 접근부에 차단기 하나씩을 두며, 본체는 경석 밖에 놓이고 별도 HISM 차단봉은 도로 중앙을 향한다. 넓은 도로에서는 필요한 만큼 차단봉 X 길이만 늘린다. 열차가 `12,000 cm` 앞에 오면 먼저 초록등이 빨간등으로 바뀌고, `9,000 cm` 앞에서 차단봉이 내려가기 시작한다. 4번째 차량 뒤로 `1,200 cm`가 더 지날 때까지 빨간색과 닫힘을 유지한 뒤 normalized speed `0.75/s`로 올라간다. 차단봉이 완전 상승 각도 `82도`에 도달해야 다시 초록색이 된다. 값은 **Sol City > Railway > Level Crossing**에서 조정할 수 있다.
 
 절차형 건물 스타일은 다음과 같다.
 
@@ -559,7 +578,7 @@ unreal.SolCityLandscapeLibrary.rebuild_sol_city_landscape(144000.0, 6000.0, -90.
 | 자유 비행 속도 범위 | `500..30,000 cm/s` |
 | 자유 비행 피치 | `-89..89도` |
 
-`W A S D`로 화면 이동, RMB 드래그로 회전과 피치 변경, 휠로 줌, `F`로 자유 비행을 전환한다. `T`는 철도 시간 토글이다. 두 열차 편성은 현재 누적 경로 거리에서 정지하고 다시 `T`를 누르면 그 위치에서 운행을 재개하며, 물·도로 교통과 나머지 도시는 계속 움직인다. 자유 비행에서는 `Q/E`로 하강·상승하고 휠로 속도를 바꾼다. 자유 비행을 끝내면 저장한 도시 Transform, 스프링암 회전, 현재 길이와 목표 줌을 복원한다.
+`W A S D`로 화면 이동, RMB 드래그로 회전과 피치 변경, 휠로 줌, `F`로 자유 비행을 전환한다. `T`는 철도 시간 토글이다. 두 열차 편성은 현재 누적 경로 거리에서 정지하고 다시 `T`를 누르면 그 위치에서 운행을 재개하며, 물·도로 교통과 나머지 도시는 계속 움직인다. 차단기는 정지한 편성 위치를 계속 판정하며 열림·닫힘 동작을 끝까지 수행하므로 접근 구간에 멈춘 열차도 안전하게 차단된다. 자유 비행에서는 `Q/E`로 하강·상승하고 휠로 속도를 바꾼다. 자유 비행을 끝내면 저장한 도시 Transform, 스프링암 회전, 현재 길이와 목표 줌을 복원한다.
 
 런타임은 Sky Atmosphere, 방향광, Sky Light, Exponential Height Fog, Volumetric Cloud와 무한 Post Process Volume을 생성하거나 기존 액터를 재사용한다. 수동 노출, AO `0.45`, AO 반경 `120`, AO Power `1.2`, 채도 `0.97`, 대비 `1.02`, Bloom `0.25`, Bloom Threshold `1.4`를 사용한다. `Z = -280 cm`의 매우 큰 충돌·그림자 없는 평면과 높이 안개로 유한 지형 밖 경계를 가린다.
 
@@ -589,6 +608,7 @@ BeginPlay 자동 생성 스모크 테스트를 실행한다.
 - `SolCity authored modules`
 - `SolCity streetscape`
 - `SolCity perimeter railway`
+- `SolCity level crossings`
 
 `missing bUsedWithInstancedStaticMeshes`, `Default Material will be used`, Python traceback, assertion 또는 fatal error가 없어야 한다.
 
@@ -607,5 +627,7 @@ PIE 시각 검증 항목:
 - 내부 주택이 생긴 큰 외곽 블록에는 좁은 보행 mews도 있고 주택 출입구가 그 길을 향한다.
 - 테이퍼 상층 모듈이 요청 필지 사각형뿐 아니라 실제 하층 모듈 지지 범위 안에도 들어간다.
 - 강물, 녹지 둔치, 옹벽, 산책로, 난간, 교량과 콘크리트 전환부 사이에 열린 틈이 없다.
+- 모든 지상 도로·철도 교차점에 도로 밖 본체 2개가 있다. 차단봉 동작 전에 빨간등이 켜지고 4번째 차량이 지날 때까지 내려가 있으며, 완전히 올라간 뒤에만 초록등으로 돌아온다.
+- 열차가 모든 폴리라인 모서리와 루프 이음새를 지날 때 순간적인 역방향 yaw 튐 없이 연속 회전한다.
 
 Blender 에셋을 다시 만들었다면 `_preview.png`를 검사하고 clean Blender 5.2 FBX 재임포트 검증도 반복한 뒤 결과를 승인한다.

@@ -149,6 +149,9 @@ ASolCityGenerator::ASolCityGenerator()
 	RailwayTrackMesh = LoadObject<UStaticMesh>(nullptr, TEXT("/Game/Art/Props/SM_SolCity_DoubleTrack_01.SM_SolCity_DoubleTrack_01"));
 	RailwayBridgeMesh = LoadObject<UStaticMesh>(nullptr, TEXT("/Game/Art/Props/SM_SolCity_RailBridge_01.SM_SolCity_RailBridge_01"));
 	RailwayTrainMesh = LoadObject<UStaticMesh>(nullptr, TEXT("/Game/Art/Props/SM_SolCity_CommuterTrain_01.SM_SolCity_CommuterTrain_01"));
+	LevelCrossingBarrierBaseMesh = LoadObject<UStaticMesh>(nullptr, TEXT("/Game/Art/Props/SM_SolCity_LevelCrossingBarrierBase_01.SM_SolCity_LevelCrossingBarrierBase_01"));
+	LevelCrossingBarrierBoomMesh = LoadObject<UStaticMesh>(nullptr, TEXT("/Game/Art/Props/SM_SolCity_LevelCrossingBarrierBoom_01.SM_SolCity_LevelCrossingBarrierBoom_01"));
+	LevelCrossingSignalMaterial = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Art/Props/M_Crossing_WarningSignal.M_Crossing_WarningSignal"));
 	AuthoredTreeMesh = AuthoredTreeAsset.Object;
 	for (int32 Index = 1; Index <= 2; ++Index)
 	{
@@ -202,9 +205,13 @@ void ASolCityGenerator::Tick(float DeltaSeconds)
 		WaterMID->SetScalarParameterValue(TEXT("Time"), WaterTime);
 		WaterMID->SetScalarParameterValue(TEXT("PanSpeed"), WaterPanSpeed);
 	}
-	if (GetWorld() && GetWorld()->IsGameWorld() && !bRailwayTimePaused)
+	if (GetWorld() && GetWorld()->IsGameWorld())
 	{
-		UpdateRailwayTrains(DeltaSeconds);
+		if (!bRailwayTimePaused)
+		{
+			UpdateRailwayTrains(DeltaSeconds);
+		}
+		UpdateRailwayCrossingBarriers(DeltaSeconds);
 	}
 }
 
@@ -220,6 +227,7 @@ void ASolCityGenerator::RegenerateCity()
 	Random.Initialize(Seed);
 	RoadSegments.Reset();
 	RailwaySegments.Reset();
+	RailwayCrossings.Reset();
 	RailwayPathCumulativeDistances.Reset();
 	RailwayTrainInstanceIndices.Reset();
 	PedestrianWaypoints.Reset();
@@ -374,6 +382,8 @@ void ASolCityGenerator::ClearGeneratedComponents()
 	RailwayTrackInstances = nullptr;
 	RailwayBridgeInstances = nullptr;
 	RailwayTrainInstances = nullptr;
+	LevelCrossingBarrierBaseInstances = nullptr;
+	LevelCrossingBarrierBoomInstances = nullptr;
 	JunctionInstances = nullptr;
 	TreeInstances = nullptr;
 	ConiferInstances.Reset();
@@ -487,6 +497,30 @@ void ASolCityGenerator::CreateInstanceGroups()
 	if (RailwayTrainMesh)
 	{
 		RailwayTrainInstances = CreateInstanceGroup(TEXT("GeneratedCommuterTrains"), RailwayTrainMesh, nullptr, FLinearColor::White, true, false);
+		RailwayTrainInstances->SetMobility(EComponentMobility::Movable);
+	}
+	if (LevelCrossingBarrierBaseMesh)
+	{
+		LevelCrossingBarrierBaseInstances = CreateInstanceGroup(TEXT("GeneratedLevelCrossingBarrierBases"), LevelCrossingBarrierBaseMesh, nullptr, FLinearColor::White, true, false);
+		// Custom data 0 drives the warning-lamp material: 0 = green, 1 = red.
+		LevelCrossingBarrierBaseInstances->SetNumCustomDataFloats(1);
+		if (LevelCrossingSignalMaterial)
+		{
+			const TArray<FStaticMaterial>& StaticMaterials = LevelCrossingBarrierBaseMesh->GetStaticMaterials();
+			for (int32 MaterialIndex = 0; MaterialIndex < StaticMaterials.Num(); ++MaterialIndex)
+			{
+				const FString SlotName = StaticMaterials[MaterialIndex].MaterialSlotName.ToString();
+				if (SlotName.Contains(TEXT("Crossing_WarningRed")) || SlotName.Contains(TEXT("Crossing_WarningSignal")))
+				{
+					LevelCrossingBarrierBaseInstances->SetMaterial(MaterialIndex, LevelCrossingSignalMaterial);
+				}
+			}
+		}
+	}
+	if (LevelCrossingBarrierBoomMesh)
+	{
+		LevelCrossingBarrierBoomInstances = CreateInstanceGroup(TEXT("GeneratedLevelCrossingBarrierBooms"), LevelCrossingBarrierBoomMesh, nullptr, FLinearColor::White, false, false);
+		LevelCrossingBarrierBoomInstances->SetMobility(EComponentMobility::Movable);
 	}
 	if (AuthoredRoadJunctionMesh)
 	{
@@ -1297,6 +1331,9 @@ void ASolCityGenerator::GenerateRailway()
 		}
 		UpdateRailwayTrains(0.0f);
 	}
+
+	GenerateRailwayCrossings();
+	UpdateRailwayCrossingBarriers(0.0f);
 }
 
 bool ASolCityGenerator::SampleRailwayPath(const float Distance, FVector& OutPosition, FVector& OutTangent) const
@@ -1419,6 +1456,255 @@ void ASolCityGenerator::UpdateRailwayTrains(const float DeltaSeconds)
 		}
 	}
 	RailwayTrainInstances->MarkRenderStateDirty();
+}
+
+void ASolCityGenerator::GenerateRailwayCrossings()
+{
+	RailwayCrossings.Reset();
+	if (RailwaySegments.IsEmpty() || RoadSegments.IsEmpty() ||
+		RailwayPathCumulativeDistances.Num() != RailwaySegments.Num() + 1)
+	{
+		return;
+	}
+
+	auto Cross2D = [](const FVector2D& A, const FVector2D& B)
+	{
+		return A.X * B.Y - A.Y * B.X;
+	};
+
+	const float BoomMeshLength = LevelCrossingBarrierBoomMesh
+		? FMath::Max(1.0f, LevelCrossingBarrierBoomMesh->GetBoundingBox().GetSize().X)
+		: 688.0f;
+	constexpr float DuplicateRadius = 900.0f;
+	constexpr float MaximumGradeSeparation = 140.0f;
+
+	for (int32 RailIndex = 0; RailIndex < RailwaySegments.Num(); ++RailIndex)
+	{
+		const FRailwaySegment& Rail = RailwaySegments[RailIndex];
+		if (Rail.bBridge)
+		{
+			continue;
+		}
+
+		const FVector2D RailStart(Rail.Start.X, Rail.Start.Y);
+		const FVector2D RailDelta(Rail.End.X - Rail.Start.X, Rail.End.Y - Rail.Start.Y);
+		FVector RailDirection3D = Rail.End - Rail.Start;
+		RailDirection3D.Z = 0.0f;
+		RailDirection3D.Normalize();
+		const FVector RailNormal(-RailDirection3D.Y, RailDirection3D.X, 0.0f);
+
+		for (const FSolCityRoadSegment& Road : RoadSegments)
+		{
+			if (Road.bBridge)
+			{
+				continue;
+			}
+
+			const FVector2D RoadStart(Road.Start.X, Road.Start.Y);
+			const FVector2D RoadDelta(Road.End.X - Road.Start.X, Road.End.Y - Road.Start.Y);
+			const float Denominator = Cross2D(RailDelta, RoadDelta);
+			if (FMath::Abs(Denominator) <= KINDA_SMALL_NUMBER)
+			{
+				continue;
+			}
+
+			const FVector2D StartDelta = RoadStart - RailStart;
+			const float RailAlpha = Cross2D(StartDelta, RoadDelta) / Denominator;
+			const float RoadAlpha = Cross2D(StartDelta, RailDelta) / Denominator;
+			if (RailAlpha < 0.0f || RailAlpha > 1.0f || RoadAlpha < 0.0f || RoadAlpha > 1.0f)
+			{
+				continue;
+			}
+
+			const FVector RailIntersection = FMath::Lerp(Rail.Start, Rail.End, RailAlpha);
+			const FVector RoadIntersection = FMath::Lerp(Road.Start, Road.End, RoadAlpha);
+			if (FMath::Abs(RailIntersection.Z - RoadIntersection.Z) > MaximumGradeSeparation)
+			{
+				continue;
+			}
+
+			bool bDuplicate = false;
+			for (const FRailwayCrossing& Existing : RailwayCrossings)
+			{
+				if (FVector::DistSquared2D(Existing.Location, RailIntersection) < FMath::Square(DuplicateRadius))
+				{
+					bDuplicate = true;
+					break;
+				}
+			}
+			if (bDuplicate)
+			{
+				continue;
+			}
+
+			FVector RoadDirection = Road.End - Road.Start;
+			RoadDirection.Z = 0.0f;
+			if (!RoadDirection.Normalize())
+			{
+				continue;
+			}
+			const FVector RoadNormal(-RoadDirection.Y, RoadDirection.X, 0.0f);
+			const float CrossingSine = FMath::Max(0.35f, FMath::Abs(FVector::DotProduct(RoadDirection, RailNormal)));
+			const float ApproachOffset = Rail.HalfWidth / CrossingSine + 240.0f;
+			const float LateralOffset = Road.HalfWidth + 70.0f;
+			const float GroundZ = FMath::Max(0.0f, RoadIntersection.Z - 8.0f);
+
+			const FVector BaseA(
+				RailIntersection.X - RoadDirection.X * ApproachOffset - RoadNormal.X * LateralOffset,
+				RailIntersection.Y - RoadDirection.Y * ApproachOffset - RoadNormal.Y * LateralOffset,
+				GroundZ);
+			const FVector BaseB(
+				RailIntersection.X + RoadDirection.X * ApproachOffset + RoadNormal.X * LateralOffset,
+				RailIntersection.Y + RoadDirection.Y * ApproachOffset + RoadNormal.Y * LateralOffset,
+				GroundZ);
+			const FVector BoomDirectionA = RoadNormal;
+			const FVector BoomDirectionB = -RoadNormal;
+			const float BoomYawA = FMath::RadiansToDegrees(FMath::Atan2(BoomDirectionA.Y, BoomDirectionA.X));
+			const float BoomYawB = FMath::RadiansToDegrees(FMath::Atan2(BoomDirectionB.Y, BoomDirectionB.X));
+
+			FRailwayCrossing& Crossing = RailwayCrossings.AddDefaulted_GetRef();
+			Crossing.Location = RailIntersection;
+			Crossing.RailDistance = FMath::Lerp(
+				RailwayPathCumulativeDistances[RailIndex],
+				RailwayPathCumulativeDistances[RailIndex + 1],
+				RailAlpha);
+			Crossing.BoomYawA = BoomYawA;
+			Crossing.BoomYawB = BoomYawB;
+			Crossing.BoomScale = FMath::Max(1.0f, (Road.HalfWidth + 120.0f) / BoomMeshLength);
+			Crossing.BoomPivotA = BaseA + BoomDirectionA * 5.0f + FVector(0.0f, 0.0f, RailwayBarrierBoomPivotHeight);
+			Crossing.BoomPivotB = BaseB + BoomDirectionB * 5.0f + FVector(0.0f, 0.0f, RailwayBarrierBoomPivotHeight);
+
+			if (LevelCrossingBarrierBaseInstances)
+			{
+				Crossing.BaseInstanceA = LevelCrossingBarrierBaseInstances->AddInstance(FTransform(FRotator(0.0f, BoomYawA, 0.0f), BaseA));
+				Crossing.BaseInstanceB = LevelCrossingBarrierBaseInstances->AddInstance(FTransform(FRotator(0.0f, BoomYawB, 0.0f), BaseB));
+			}
+			if (LevelCrossingBarrierBoomInstances)
+			{
+				Crossing.BoomInstanceA = LevelCrossingBarrierBoomInstances->AddInstance(FTransform::Identity);
+				Crossing.BoomInstanceB = LevelCrossingBarrierBoomInstances->AddInstance(FTransform::Identity);
+			}
+		}
+	}
+
+	UE_LOG(LogTemp, Display, TEXT("SolCity level crossings: crossings=%d bases=%d booms=%d"),
+		RailwayCrossings.Num(),
+		LevelCrossingBarrierBaseInstances ? LevelCrossingBarrierBaseInstances->GetInstanceCount() : 0,
+		LevelCrossingBarrierBoomInstances ? LevelCrossingBarrierBoomInstances->GetInstanceCount() : 0);
+}
+
+void ASolCityGenerator::UpdateRailwayCrossingBarriers(const float DeltaSeconds)
+{
+	if ((!LevelCrossingBarrierBaseInstances && !LevelCrossingBarrierBoomInstances) ||
+		RailwayCrossings.IsEmpty() || RailwayLoopLength <= KINDA_SMALL_NUMBER)
+	{
+		return;
+	}
+
+	auto WrapDistance = [this](const float Distance)
+	{
+		float Wrapped = FMath::Fmod(Distance, RailwayLoopLength);
+		if (Wrapped < 0.0f)
+		{
+			Wrapped += RailwayLoopLength;
+		}
+		return Wrapped;
+	};
+
+	constexpr int32 ConsistCount = 2;
+	const int32 CarCount = FMath::Clamp(RailwayCarsPerConsist, 1, 8);
+	const float TrainLength = RailwayTrainMesh ? RailwayTrainMesh->GetBoundingBox().GetSize().X : 0.0f;
+	const float CarSpacing = TrainLength + FMath::Max(0.0f, RailwayCarGap);
+	const float TailClearance = (CarCount - 1) * CarSpacing + TrainLength * 0.5f + FMath::Max(0.0f, RailwayBarrierReleaseDistance);
+	const bool bHasActiveTrains = RailwayTrainInstances && RailwayTrainInstanceIndices.Num() == ConsistCount * CarCount;
+	bool bUpdatedAnyBoom = false;
+	bool bUpdatedAnySignal = false;
+
+	for (FRailwayCrossing& Crossing : RailwayCrossings)
+	{
+		bool bShouldClose = false;
+		bool bWarningActive = false;
+		if (bHasActiveTrains)
+		{
+			for (int32 ConsistIndex = 0; ConsistIndex < ConsistCount; ++ConsistIndex)
+			{
+				const float DirectionSign = ConsistIndex == 0 ? 1.0f : -1.0f;
+				const float InitialPhase = RailwayLoopLength * (ConsistIndex == 0 ? 0.12f : 0.62f);
+				const float HeadDistance = InitialPhase + DirectionSign * RailwayTrainTravelDistance;
+				const float DistanceAhead = DirectionSign > 0.0f
+					? WrapDistance(Crossing.RailDistance - HeadDistance)
+					: WrapDistance(HeadDistance - Crossing.RailDistance);
+				const float DistancePassed = DirectionSign > 0.0f
+					? WrapDistance(HeadDistance - Crossing.RailDistance)
+					: WrapDistance(Crossing.RailDistance - HeadDistance);
+				const bool bTrainStillClearing = DistancePassed <= TailClearance;
+				if (DistanceAhead <= FMath::Max(RailwayBarrierLeadDistance, RailwayBarrierWarningLeadDistance) || bTrainStillClearing)
+				{
+					bWarningActive = true;
+				}
+				if (DistanceAhead <= FMath::Max(0.0f, RailwayBarrierLeadDistance) || bTrainStillClearing)
+				{
+					bShouldClose = true;
+				}
+				if (bWarningActive && bShouldClose)
+				{
+					break;
+				}
+			}
+		}
+
+		Crossing.CloseAlpha = FMath::FInterpConstantTo(
+			Crossing.CloseAlpha,
+			bShouldClose ? 1.0f : 0.0f,
+			FMath::Max(0.0f, DeltaSeconds),
+			FMath::Max(0.05f, RailwayBarrierMotionSpeed));
+		const float BoomPitch = FMath::Lerp(RailwayBarrierRaisedAngle, 0.0f, Crossing.CloseAlpha);
+		const FVector BoomScale(Crossing.BoomScale, 1.0f, 1.0f);
+		const bool bSignalRed = bWarningActive || Crossing.CloseAlpha > KINDA_SMALL_NUMBER;
+		if (LevelCrossingBarrierBaseInstances && bSignalRed != Crossing.bSignalRed)
+		{
+			const float SignalValue = bSignalRed ? 1.0f : 0.0f;
+			if (Crossing.BaseInstanceA != INDEX_NONE)
+			{
+				LevelCrossingBarrierBaseInstances->SetCustomDataValue(Crossing.BaseInstanceA, 0, SignalValue, false);
+			}
+			if (Crossing.BaseInstanceB != INDEX_NONE)
+			{
+				LevelCrossingBarrierBaseInstances->SetCustomDataValue(Crossing.BaseInstanceB, 0, SignalValue, false);
+			}
+			Crossing.bSignalRed = bSignalRed;
+			bUpdatedAnySignal = true;
+		}
+
+		auto UpdateBoom = [this, BoomPitch, &BoomScale, &bUpdatedAnyBoom](
+			const int32 InstanceIndex, const FVector& Pivot, const float Yaw)
+		{
+			if (!LevelCrossingBarrierBoomInstances || InstanceIndex == INDEX_NONE)
+			{
+				return;
+			}
+			const FQuat Rotation = FRotator(BoomPitch, Yaw, 0.0f).Quaternion();
+			LevelCrossingBarrierBoomInstances->UpdateInstanceTransform(
+				InstanceIndex,
+				FTransform(Rotation, Pivot, BoomScale),
+				false,
+				false,
+				true);
+			bUpdatedAnyBoom = true;
+		};
+
+		UpdateBoom(Crossing.BoomInstanceA, Crossing.BoomPivotA, Crossing.BoomYawA);
+		UpdateBoom(Crossing.BoomInstanceB, Crossing.BoomPivotB, Crossing.BoomYawB);
+	}
+
+	if (bUpdatedAnyBoom)
+	{
+		LevelCrossingBarrierBoomInstances->MarkRenderStateDirty();
+	}
+	if (bUpdatedAnySignal)
+	{
+		LevelCrossingBarrierBaseInstances->MarkRenderStateDirty();
+	}
 }
 
 void ASolCityGenerator::GenerateDistrictSurfaces()

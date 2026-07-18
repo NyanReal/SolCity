@@ -11,6 +11,7 @@ ASSET_NAMES = (
     "SM_SolCity_LevelCrossingBarrierBase_01",
     "SM_SolCity_LevelCrossingBarrierBoom_01",
 )
+SIGNAL_MATERIAL_NAME = "M_Crossing_WarningSignal"
 
 
 def import_asset(asset_name):
@@ -55,4 +56,74 @@ def import_asset(asset_name):
 for name in ASSET_NAMES:
     import_asset(name)
 
-unreal.log("SolCity: imported split level-crossing base and boom assets.")
+
+def create_signal_material():
+    """Create a HISM-compatible green/red lamp driven by custom data float 0."""
+    asset_path = f"{DESTINATION}/{SIGNAL_MATERIAL_NAME}"
+    material = unreal.EditorAssetLibrary.load_asset(asset_path)
+    created_new = material is None
+    if not material:
+        material = unreal.AssetToolsHelpers.get_asset_tools().create_asset(
+            SIGNAL_MATERIAL_NAME,
+            DESTINATION,
+            unreal.Material,
+            unreal.MaterialFactoryNew(),
+        )
+    if not isinstance(material, unreal.Material):
+        raise RuntimeError(f"{asset_path} exists but is not a Material")
+
+    material.set_editor_property("used_with_instanced_static_meshes", True)
+    if created_new:
+        signal_state = unreal.MaterialEditingLibrary.create_material_expression(
+            material, unreal.MaterialExpressionPerInstanceCustomData, -620, 20
+        )
+        signal_state.set_editor_property("data_index", 0)
+        signal_state.set_editor_property("const_default_value", 0.0)
+
+        green = unreal.MaterialEditingLibrary.create_material_expression(
+            material, unreal.MaterialExpressionConstant3Vector, -620, -160
+        )
+        green.set_editor_property("constant", unreal.LinearColor(0.005, 0.32, 0.012, 1.0))
+        red = unreal.MaterialEditingLibrary.create_material_expression(
+            material, unreal.MaterialExpressionConstant3Vector, -620, -70
+        )
+        red.set_editor_property("constant", unreal.LinearColor(0.42, 0.004, 0.006, 1.0))
+        signal_color = unreal.MaterialEditingLibrary.create_material_expression(
+            material, unreal.MaterialExpressionLinearInterpolate, -330, -70
+        )
+        unreal.MaterialEditingLibrary.connect_material_expressions(green, "", signal_color, "A")
+        unreal.MaterialEditingLibrary.connect_material_expressions(red, "", signal_color, "B")
+        unreal.MaterialEditingLibrary.connect_material_expressions(signal_state, "", signal_color, "Alpha")
+
+        emission_strength = unreal.MaterialEditingLibrary.create_material_expression(
+            material, unreal.MaterialExpressionConstant, -330, 90
+        )
+        emission_strength.set_editor_property("r", 7.0)
+        emissive = unreal.MaterialEditingLibrary.create_material_expression(
+            material, unreal.MaterialExpressionMultiply, -90, 20
+        )
+        unreal.MaterialEditingLibrary.connect_material_expressions(signal_color, "", emissive, "A")
+        unreal.MaterialEditingLibrary.connect_material_expressions(emission_strength, "", emissive, "B")
+
+        roughness = unreal.MaterialEditingLibrary.create_material_expression(
+            material, unreal.MaterialExpressionConstant, -90, 170
+        )
+        roughness.set_editor_property("r", 0.22)
+        unreal.MaterialEditingLibrary.connect_material_property(
+            signal_color, "", unreal.MaterialProperty.MP_BASE_COLOR
+        )
+        unreal.MaterialEditingLibrary.connect_material_property(
+            emissive, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR
+        )
+        unreal.MaterialEditingLibrary.connect_material_property(
+            roughness, "", unreal.MaterialProperty.MP_ROUGHNESS
+        )
+
+    unreal.MaterialEditingLibrary.recompile_material(material)
+    unreal.EditorAssetLibrary.save_loaded_asset(material)
+    return material
+
+
+create_signal_material()
+
+unreal.log("SolCity: imported split level-crossing assets and built the green/red HISM signal material.")

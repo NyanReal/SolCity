@@ -225,6 +225,17 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sol City|Railway")
 	TObjectPtr<UStaticMesh> RailwayTrainMesh;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sol City|Railway|Level Crossing")
+	TObjectPtr<UStaticMesh> LevelCrossingBarrierBaseMesh;
+
+	/** Authored with its origin at the hinge so the HISM instance can rotate independently. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sol City|Railway|Level Crossing")
+	TObjectPtr<UStaticMesh> LevelCrossingBarrierBoomMesh;
+
+	/** HISM custom-data material: float 0 selects green (0) or red (1). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sol City|Railway|Level Crossing")
+	TObjectPtr<UMaterialInterface> LevelCrossingSignalMaterial;
+
 	/** Speed of each four-car commuter consist along the closed railway loop. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sol City|Railway", meta = (ClampMin = "0.0", ClampMax = "5000.0", UIMin = "0.0", UIMax = "3000.0"))
 	float RailwayTrainSpeed = 1800.0f;
@@ -236,6 +247,29 @@ public:
 	/** Small coupler gap measured between consecutive authored car bounds. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sol City|Railway", meta = (ClampMin = "0.0", ClampMax = "300.0"))
 	float RailwayCarGap = 80.0f;
+
+	/** Distance ahead of a train at which an at-grade crossing starts closing. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sol City|Railway|Level Crossing", meta = (ClampMin = "1000.0", ClampMax = "20000.0"))
+	float RailwayBarrierLeadDistance = 9000.0f;
+
+	/** Earlier approach distance that changes the crossing lamps from green to red. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sol City|Railway|Level Crossing", meta = (ClampMin = "1000.0", ClampMax = "30000.0"))
+	float RailwayBarrierWarningLeadDistance = 12000.0f;
+
+	/** Extra clearance behind the last car before a crossing starts reopening. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sol City|Railway|Level Crossing", meta = (ClampMin = "0.0", ClampMax = "5000.0"))
+	float RailwayBarrierReleaseDistance = 1200.0f;
+
+	/** Normalized close/open progress per second. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sol City|Railway|Level Crossing", meta = (ClampMin = "0.05", ClampMax = "4.0"))
+	float RailwayBarrierMotionSpeed = 0.75f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sol City|Railway|Level Crossing", meta = (ClampMin = "45.0", ClampMax = "90.0"))
+	float RailwayBarrierRaisedAngle = 82.0f;
+
+	/** Boom hinge height above the barrier base origin, matched to the authored mesh. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sol City|Railway|Level Crossing", meta = (ClampMin = "50.0", ClampMax = "300.0"))
+	float RailwayBarrierBoomPivotHeight = 134.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sol City|Foliage")
 	TObjectPtr<UStaticMesh> AuthoredTreeMesh;
@@ -306,6 +340,23 @@ private:
 		bool bBridge = false;
 	};
 
+	struct FRailwayCrossing
+	{
+		FVector Location = FVector::ZeroVector;
+		float RailDistance = 0.0f;
+		FVector BoomPivotA = FVector::ZeroVector;
+		FVector BoomPivotB = FVector::ZeroVector;
+		float BoomYawA = 0.0f;
+		float BoomYawB = 0.0f;
+		float BoomScale = 1.0f;
+		int32 BaseInstanceA = INDEX_NONE;
+		int32 BaseInstanceB = INDEX_NONE;
+		int32 BoomInstanceA = INDEX_NONE;
+		int32 BoomInstanceB = INDEX_NONE;
+		float CloseAlpha = 0.0f;
+		bool bSignalRed = false;
+	};
+
 	UPROPERTY(VisibleAnywhere, Category = "Sol City")
 	TObjectPtr<USceneComponent> SceneRoot;
 
@@ -363,6 +414,8 @@ private:
 	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> RailwayTrackInstances;
 	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> RailwayBridgeInstances;
 	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> RailwayTrainInstances;
+	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> LevelCrossingBarrierBaseInstances;
+	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> LevelCrossingBarrierBoomInstances;
 	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> JunctionInstances;
 	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> TreeInstances;
 	TArray<TObjectPtr<UHierarchicalInstancedStaticMeshComponent>> ConiferInstances;
@@ -382,6 +435,7 @@ private:
 
 	TArray<FBuildingFootprint> OccupiedBuildings;
 	TArray<FRailwaySegment> RailwaySegments;
+	TArray<FRailwayCrossing> RailwayCrossings;
 	TArray<float> RailwayPathCumulativeDistances;
 	TArray<int32> RailwayTrainInstanceIndices;
 	TArray<FVector2D> JunctionCapLocations;
@@ -407,6 +461,8 @@ private:
 	void GenerateRoadHierarchy();
 	void GenerateRailway();
 	void UpdateRailwayTrains(float DeltaSeconds);
+	void GenerateRailwayCrossings();
+	void UpdateRailwayCrossingBarriers(float DeltaSeconds);
 	bool SampleRailwayPath(float Distance, FVector& OutPosition, FVector& OutTangent) const;
 	void GenerateDistrictSurfaces();
 	void GenerateBuildings();
