@@ -13,6 +13,7 @@ Unreal Engine 5.7 C++ city-builder simulation prototype. It creates a complete c
 - `W A S D`: pan across the city
 - Mouse wheel: zoom in/out
 - Hold right mouse button and move horizontally: rotate
+- Hold middle mouse button and drag vertically: adjust the camera's ground-view angle
 
 ## Runtime systems
 

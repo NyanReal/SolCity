@@ -57,10 +57,13 @@ void ACityCameraPawn::SetupPlayerInputComponent(UInputComponent* PlayerInputComp
     PlayerInputComponent->BindAxis(TEXT("MoveForward"), this, &ACityCameraPawn::MoveForward);
     PlayerInputComponent->BindAxis(TEXT("MoveRight"), this, &ACityCameraPawn::MoveRight);
     PlayerInputComponent->BindAxis(TEXT("CameraRotate"), this, &ACityCameraPawn::Rotate);
+    PlayerInputComponent->BindAxis(TEXT("CameraPitch"), this, &ACityCameraPawn::AdjustPitch);
     PlayerInputComponent->BindAction(TEXT("ZoomIn"), IE_Pressed, this, &ACityCameraPawn::ZoomIn);
     PlayerInputComponent->BindAction(TEXT("ZoomOut"), IE_Pressed, this, &ACityCameraPawn::ZoomOut);
     PlayerInputComponent->BindAction(TEXT("RotateDrag"), IE_Pressed, this, &ACityCameraPawn::SetRotateDragPressed);
     PlayerInputComponent->BindAction(TEXT("RotateDrag"), IE_Released, this, &ACityCameraPawn::SetRotateDragReleased);
+    PlayerInputComponent->BindAction(TEXT("PitchDrag"), IE_Pressed, this, &ACityCameraPawn::SetPitchDragPressed);
+    PlayerInputComponent->BindAction(TEXT("PitchDrag"), IE_Released, this, &ACityCameraPawn::SetPitchDragReleased);
 }
 
 void ACityCameraPawn::ZoomIn() { Zoom(1.0f); }
@@ -85,5 +88,19 @@ void ACityCameraPawn::Rotate(float Value)
     }
 }
 
+void ACityCameraPawn::AdjustPitch(float Value)
+{
+    if (bPitchDragging && !FMath::IsNearlyZero(Value))
+    {
+        FRotator ArmRotation = SpringArm->GetRelativeRotation();
+        const float LowerPitch = FMath::Min(MinCameraPitch, MaxCameraPitch);
+        const float UpperPitch = FMath::Max(MinCameraPitch, MaxCameraPitch);
+        ArmRotation.Pitch = FMath::Clamp(ArmRotation.Pitch + Value * PitchDragSpeed, LowerPitch, UpperPitch);
+        SpringArm->SetRelativeRotation(ArmRotation);
+    }
+}
+
 void ACityCameraPawn::SetRotateDragPressed() { bRotateDragging = true; }
 void ACityCameraPawn::SetRotateDragReleased() { bRotateDragging = false; }
+void ACityCameraPawn::SetPitchDragPressed() { bPitchDragging = true; }
+void ACityCameraPawn::SetPitchDragReleased() { bPitchDragging = false; }

@@ -139,7 +139,7 @@ void ASolCityGameMode::BeginPlay()
 	ReuseOrSpawnEnvironmentActor<ASkyAtmosphere>(World, TEXT("Sky Atmosphere"));
 	bool bSpawnedSun = false;
 	if (ADirectionalLight* Sun = ReuseOrSpawnEnvironmentActor<ADirectionalLight>(
-		World, TEXT("Directional Sun"), FVector(0.0f, 0.0f, 8000.0f), FRotator(-161.0f, 193.0f, -180.0f), &bSpawnedSun))
+		World, TEXT("Directional Sun"), FVector(0.0f, 0.0f, 8000.0f), FRotator(-166.0f, -76.0f, 0.0f), &bSpawnedSun))
 	{
 		// The requested location/rotation/scale are applied by the spawn path. An
 		// authored sun keeps its transform while receiving the shared look settings.

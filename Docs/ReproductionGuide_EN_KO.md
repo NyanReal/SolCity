@@ -145,7 +145,7 @@ Run `Content/Python/SetupSolCityBuildingMaterials.py` separately whenever buildi
 - Keep cats off the road on a separate sidewalk waypoint graph and verify their visual forward direction against movement.
 - Use six traffic-signal phases across two conflicting movement axes.
 - Place modeled trees outside roads, river clearance, bridge approaches, and occupied building lots.
-- Support `W A S D` panning, mouse-wheel zoom, and right-mouse horizontal rotation.
+- Support `W A S D` panning, mouse-wheel zoom, right-mouse horizontal rotation, and middle-mouse vertical dragging to adjust the camera pitch (`-80` to `-25` degrees by default).
 
 ### 7. Environment, lighting, and visual parity
 
@@ -154,7 +154,7 @@ When no authored equivalent exists, the runtime creates the environment actor. W
 Directional Light settings:
 
 - Location `(0, 0, 8000)`
-- Rotation Roll/X `-180 degrees`, Pitch/Y `-161 degrees`, Yaw/Z `193 degrees`
+- Rotation Roll/X `0 degrees`, Pitch/Y `-166 degrees`, Yaw/Z `-76 degrees`
 - Scale `(2.5, 2.5, 2.5)`
 - Intensity `3.4`, indirect intensity `1.05`
 - Source angle `1.0`, contact-shadow length `0.035`, contact-shadow intensity `0.65`
@@ -191,7 +191,8 @@ Legacy mode uses actor-level overrides only; it does not replace the production 
 
 Open `SolCity.uproject`, load `/Game/Maps/SolCity`, and start Play-in-Editor. Verify:
 
-- The mouse wheel zooms through the full range and camera controls remain responsive.
+- The mouse wheel zooms through the full range; `W A S D` panning and right-mouse horizontal rotation remain responsive.
+- Holding the middle mouse button and dragging vertically adjusts the ground-view angle, stops at the configured pitch limits, and does not change yaw or zoom.
 - Landscape edges, distant ground, fog, and clouds produce no black perimeter.
 - Grass is muted rather than fluorescent and shaded facades retain ambient sky color.
 - River and spline roads are continuous; junctions and bridge approaches have no visible seams.
@@ -352,7 +353,7 @@ ImageGen 결과로 앞의 텍스처 3개를 교체할 때는 파일명을 유지
 - 고양이는 차도 밖의 별도 보도 웨이포인트 그래프를 사용하며 시각 전방과 이동 방향이 일치해야 한다.
 - 충돌하는 두 이동 축에 대해 6단계 신호 주기를 사용한다.
 - 나무는 도로, 강 여유 영역, 교량 진입부와 이미 사용 중인 건물 필지를 피해 배치한다.
-- `W A S D` 화면 이동, 마우스 휠 줌과 마우스 오른쪽 버튼 수평 이동 회전을 지원한다.
+- `W A S D` 화면 이동, 마우스 휠 줌, 마우스 오른쪽 버튼 수평 이동 회전과 마우스 가운데 버튼 수직 드래그 카메라 피치 조절(기본 `-80`도~`-25`도)을 지원한다.
 
 ### 7. 환경, 조명과 비주얼 패리티
 
@@ -361,7 +362,7 @@ ImageGen 결과로 앞의 텍스처 3개를 교체할 때는 파일명을 유지
 Directional Light 설정은 다음과 같다.
 
 - 위치 `(0, 0, 8000)`
-- 회전 Roll/X `-180도`, Pitch/Y `-161도`, Yaw/Z `193도`
+- 회전 Roll/X `0도`, Pitch/Y `-166도`, Yaw/Z `-76도`
 - 스케일 `(2.5, 2.5, 2.5)`
 - 강도 `3.4`, 간접광 강도 `1.05`
 - Source Angle `1.0`, Contact Shadow Length `0.035`, Contact Shadow Intensity `0.65`
@@ -398,7 +399,8 @@ Legacy 모드는 액터 단위 오버라이드만 사용하며 실제 Static Mes
 
 `SolCity.uproject`를 열고 `/Game/Maps/SolCity`를 로드해 Play-in-Editor를 실행한다. 다음 내용을 검증한다.
 
-- 마우스 휠이 전체 범위에서 줌을 수행하고 카메라 조작이 정상인지 확인한다.
+- 마우스 휠이 전체 범위에서 줌을 수행하고 `W A S D` 이동과 마우스 오른쪽 버튼 수평 회전이 정상인지 확인한다.
+- 마우스 가운데 버튼을 누른 채 수직으로 드래그하면 지면을 바라보는 각도가 조절되고 설정된 피치 제한에서 멈추며, 요와 줌은 바뀌지 않는지 확인한다.
 - Landscape 가장자리, 원경 지면, 포그와 구름을 통해 검은 외곽이 보이지 않는지 확인한다.
 - 잔디가 형광색이 아니며 그늘진 건물 면에 앰비언트 스카이 컬러가 남는지 확인한다.
 - 강과 스플라인 도로가 연속적이며 교차로와 교량 진입부에 이음매가 없는지 확인한다.

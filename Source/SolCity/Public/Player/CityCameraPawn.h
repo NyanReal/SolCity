@@ -29,8 +29,11 @@ private:
     void MoveForward(float Value);
     void MoveRight(float Value);
     void Rotate(float Value);
+    void AdjustPitch(float Value);
     void SetRotateDragPressed();
     void SetRotateDragReleased();
+    void SetPitchDragPressed();
+    void SetPitchDragReleased();
 
     UPROPERTY(VisibleAnywhere)
     TObjectPtr<USceneComponent> Root;
@@ -56,7 +59,17 @@ private:
     UPROPERTY(EditAnywhere, Category="Camera")
     float PanSpeed = 5000.0f;
 
+    UPROPERTY(EditAnywhere, Category="Camera", meta=(ClampMin="0.0", UIMin="0.0"))
+    float PitchDragSpeed = 1.5f;
+
+    UPROPERTY(EditAnywhere, Category="Camera", meta=(ClampMin="-89.0", ClampMax="0.0", UIMin="-89.0", UIMax="0.0"))
+    float MinCameraPitch = -80.0f;
+
+    UPROPERTY(EditAnywhere, Category="Camera", meta=(ClampMin="-89.0", ClampMax="0.0", UIMin="-89.0", UIMax="0.0"))
+    float MaxCameraPitch = -25.0f;
+
     float ForwardInput = 0.0f;
     float RightInput = 0.0f;
     bool bRotateDragging = false;
+    bool bPitchDragging = false;
 };
