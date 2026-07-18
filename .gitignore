@@ -10,3 +10,7 @@ __pycache__/
 *.pyc
 
 # Keep imported .uasset materials/textures when deliberately checked in.
+*.blend1
+
+# Local vendor checkout and Python runtimes used to drive Blender MCP.
+Tools/blender-mcp-server/
