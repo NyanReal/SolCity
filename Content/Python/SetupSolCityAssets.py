@@ -5,6 +5,7 @@ existing generated textures/materials are replaced in-place.
 """
 
 import os
+import importlib.util
 import unreal
 
 
@@ -66,7 +67,6 @@ def import_authored_buildings(replace_existing=True):
         if unreal.EditorAssetLibrary.does_asset_exist(asset_path):
             if not replace_existing:
                 continue
-            unreal.EditorAssetLibrary.delete_asset(asset_path)
         source = os.path.join(unreal.Paths.project_content_dir(), "Art", "Buildings", asset_name + ".fbx")
         task = unreal.AssetImportTask()
         task.set_editor_property("filename", source)
@@ -78,7 +78,9 @@ def import_authored_buildings(replace_existing=True):
         options = unreal.FbxImportUI()
         options.set_editor_property("import_mesh", True)
         options.set_editor_property("import_as_skeletal", False)
-        options.set_editor_property("import_materials", True)
+        # Preserve the native UE material library and deterministic slot
+        # overrides. Imported FBX materials are legacy authoring data only.
+        options.set_editor_property("import_materials", False)
         options.set_editor_property("import_textures", False)
         options.set_editor_property("mesh_type_to_import", unreal.FBXImportType.FBXIT_STATIC_MESH)
         static_data = options.get_editor_property("static_mesh_import_data")
@@ -90,6 +92,19 @@ def import_authored_buildings(replace_existing=True):
         if not mesh:
             raise RuntimeError(f"Authored building FBX import failed: {asset_name}")
         unreal.EditorAssetLibrary.save_loaded_asset(mesh)
+
+
+def apply_native_building_materials():
+    """Load the dedicated building material setup without relying on sys.path."""
+    script_path = os.path.join(
+        unreal.Paths.project_content_dir(), "Python", "SetupSolCityBuildingMaterials.py"
+    )
+    spec = importlib.util.spec_from_file_location("solcity_building_materials", script_path)
+    if not spec or not spec.loader:
+        raise RuntimeError(f"Could not load native building material setup: {script_path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    module.main()
 
 
 def configure_material(material, asset_key, texture, is_water=False):
@@ -219,6 +234,7 @@ def main():
         make_material(key, texture, is_water=(key == "AnimeWater"))
     make_distant_ground_material()
     import_authored_buildings()
+    apply_native_building_materials()
     enable_instanced_material_usage()
     ensure_startup_level()
     unreal.log("Sol City: imagegen textures and materials are ready.")

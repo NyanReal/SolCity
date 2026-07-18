@@ -10,9 +10,11 @@
 #include "Components/VolumetricCloudComponent.h"
 #include "Engine/DirectionalLight.h"
 #include "Engine/ExponentialHeightFog.h"
+#include "Engine/PostProcessVolume.h"
 #include "Engine/SkyLight.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/StaticMeshActor.h"
+#include "EngineUtils.h"
 #include "Materials/MaterialInterface.h"
 #include "Player/CityCameraPawn.h"
 #include "Kismet/GameplayStatics.h"
@@ -24,12 +26,60 @@
 
 namespace
 {
+	DEFINE_LOG_CATEGORY_STATIC(LogSolCityEnvironment, Log, All);
+
 	template<typename T>
 	T* SpawnAlways(UWorld* World, const FVector& Location = FVector::ZeroVector, const FRotator& Rotation = FRotator::ZeroRotator)
 	{
 		FActorSpawnParameters Params;
 		Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 		return World ? World->SpawnActor<T>(T::StaticClass(), Location, Rotation, Params) : nullptr;
+	}
+
+	template<typename T>
+	T* ReuseOrSpawnEnvironmentActor(
+		UWorld* World,
+		const TCHAR* EnvironmentRole,
+		const FVector& SpawnLocation = FVector::ZeroVector,
+		const FRotator& SpawnRotation = FRotator::ZeroRotator,
+		bool* bOutSpawned = nullptr)
+	{
+		if (bOutSpawned)
+		{
+			*bOutSpawned = false;
+		}
+		if (!World)
+		{
+			return nullptr;
+		}
+
+		for (TActorIterator<T> It(World); It; ++It)
+		{
+			T* ExistingActor = *It;
+			if (IsValid(ExistingActor) && !ExistingActor->IsActorBeingDestroyed())
+			{
+				UE_LOG(LogSolCityEnvironment, Log, TEXT("Environment %s: reused %s"), EnvironmentRole, *ExistingActor->GetPathName());
+				return ExistingActor;
+			}
+		}
+
+		T* SpawnedActor = SpawnAlways<T>(World, SpawnLocation, SpawnRotation);
+		if (SpawnedActor)
+		{
+			if (bOutSpawned)
+			{
+				*bOutSpawned = true;
+			}
+#if WITH_EDITOR
+			SpawnedActor->SetActorLabel(FString::Printf(TEXT("SolCity Runtime %s"), EnvironmentRole));
+#endif
+			UE_LOG(LogSolCityEnvironment, Log, TEXT("Environment %s: spawned %s"), EnvironmentRole, *SpawnedActor->GetPathName());
+		}
+		else
+		{
+			UE_LOG(LogSolCityEnvironment, Error, TEXT("Environment %s: spawn failed"), EnvironmentRole);
+		}
+		return SpawnedActor;
 	}
 
 	void AddUniqueConnection(TArray<int32>& Connections, int32 Candidate)
@@ -86,24 +136,39 @@ void ASolCityGameMode::BeginPlay()
 
 	// A real atmosphere gives the movable skylight a blue environment to capture,
 	// keeping shaded facades readable without flattening the sunny art direction.
-	SpawnAlways<ASkyAtmosphere>(World);
-	if (ADirectionalLight* Sun = SpawnAlways<ADirectionalLight>(World, FVector(0.0f, 0.0f, 8000.0f), FRotator(-161.0f, 193.0f, -180.0f)))
+	ReuseOrSpawnEnvironmentActor<ASkyAtmosphere>(World, TEXT("Sky Atmosphere"));
+	bool bSpawnedSun = false;
+	if (ADirectionalLight* Sun = ReuseOrSpawnEnvironmentActor<ADirectionalLight>(
+		World, TEXT("Directional Sun"), FVector(0.0f, 0.0f, 8000.0f), FRotator(-161.0f, 193.0f, -180.0f), &bSpawnedSun))
 	{
-		Sun->SetActorScale3D(FVector(2.5f));
+		// The requested location/rotation/scale are applied by the spawn path. An
+		// authored sun keeps its transform while receiving the shared look settings.
+		if (bSpawnedSun)
+		{
+			Sun->SetActorScale3D(FVector(2.5f));
+		}
 		Sun->GetLightComponent()->SetMobility(EComponentMobility::Movable);
 		Sun->GetLightComponent()->SetIntensity(3.4f);
 		Sun->GetLightComponent()->SetIndirectLightingIntensity(1.05f);
 		Sun->GetLightComponent()->SetLightColor(FLinearColor(1.0f, 0.94f, 0.86f));
 		Sun->GetLightComponent()->SetVolumetricScatteringIntensity(0.8f);
 		UDirectionalLightComponent* SunComponent = Sun->GetComponent();
+		SunComponent->SetLightSourceAngle(1.0f);
+		SunComponent->SetShadowSourceAngleFactor(1.0f);
+		SunComponent->ContactShadowLength = 0.035f;
+		SunComponent->ContactShadowLengthInWS = false;
+		SunComponent->ContactShadowCastingIntensity = 0.65f;
+		SunComponent->ContactShadowNonCastingIntensity = 0.0f;
 		SunComponent->SetAtmosphereSunLight(true);
 		SunComponent->bCastCloudShadows = true;
 		SunComponent->CloudShadowStrength = 0.35f;
 		SunComponent->CloudShadowOnSurfaceStrength = 0.35f;
 		SunComponent->CloudShadowOnAtmosphereStrength = 0.25f;
+		SunComponent->MarkRenderStateDirty();
 	}
 
-	if (AExponentialHeightFog* Fog = SpawnAlways<AExponentialHeightFog>(World, FVector(0.0f, 0.0f, -100.0f)))
+	if (AExponentialHeightFog* Fog = ReuseOrSpawnEnvironmentActor<AExponentialHeightFog>(
+		World, TEXT("Exponential Height Fog"), FVector(0.0f, 0.0f, -100.0f)))
 	{
 		UExponentialHeightFogComponent* FogComponent = Fog->GetComponent();
 		FogComponent->SetFogDensity(0.012f);
@@ -121,7 +186,7 @@ void ASolCityGameMode::BeginPlay()
 		FogComponent->SetVolumetricFogDistance(100000.0f);
 	}
 
-	if (AVolumetricCloud* Cloud = SpawnAlways<AVolumetricCloud>(World))
+	if (AVolumetricCloud* Cloud = ReuseOrSpawnEnvironmentActor<AVolumetricCloud>(World, TEXT("Volumetric Cloud")))
 	{
 		if (UVolumetricCloudComponent* CloudComponent = Cloud->FindComponentByClass<UVolumetricCloudComponent>())
 		{
@@ -135,7 +200,7 @@ void ASolCityGameMode::BeginPlay()
 			CloudComponent->SetMaterial(TryLoadMaterial(TEXT("/Engine/EngineSky/VolumetricClouds/m_SimpleVolumetricCloud_Inst.m_SimpleVolumetricCloud_Inst")));
 		}
 	}
-	if (ASkyLight* Sky = SpawnAlways<ASkyLight>(World))
+	if (ASkyLight* Sky = ReuseOrSpawnEnvironmentActor<ASkyLight>(World, TEXT("Sky Light")))
 	{
 		USkyLightComponent* SkyComponent = Sky->GetLightComponent();
 		SkyComponent->SetMobility(EComponentMobility::Movable);
@@ -147,6 +212,42 @@ void ASolCityGameMode::BeginPlay()
 		SkyComponent->SetLowerHemisphereColor(FLinearColor(0.22f, 0.34f, 0.52f));
 		SkyComponent->SetRealTimeCaptureEnabled(true);
 		SkyComponent->RecaptureSky();
+	}
+
+	if (APostProcessVolume* PostProcess = ReuseOrSpawnEnvironmentActor<APostProcessVolume>(World, TEXT("Post Process Volume")))
+	{
+		PostProcess->bEnabled = true;
+		PostProcess->bUnbound = true;
+		PostProcess->BlendWeight = 1.0f;
+		PostProcess->Priority = 1.0f;
+
+		FPostProcessSettings& Settings = PostProcess->Settings;
+		Settings.bOverride_AutoExposureMethod = true;
+		Settings.AutoExposureMethod = AEM_Manual;
+		Settings.bOverride_AutoExposureApplyPhysicalCameraExposure = true;
+		Settings.AutoExposureApplyPhysicalCameraExposure = false;
+		Settings.bOverride_AutoExposureBias = true;
+		Settings.AutoExposureBias = 0.0f;
+
+		Settings.bOverride_AmbientOcclusionIntensity = true;
+		Settings.AmbientOcclusionIntensity = 0.45f;
+		Settings.bOverride_AmbientOcclusionRadius = true;
+		Settings.AmbientOcclusionRadius = 120.0f;
+		Settings.bOverride_AmbientOcclusionPower = true;
+		Settings.AmbientOcclusionPower = 1.2f;
+
+		Settings.bOverride_ColorSaturation = true;
+		Settings.ColorSaturation = FVector4(0.97f, 0.97f, 0.97f, 1.0f);
+		Settings.bOverride_ColorContrast = true;
+		Settings.ColorContrast = FVector4(1.02f, 1.02f, 1.02f, 1.0f);
+
+		Settings.bOverride_BloomIntensity = true;
+		Settings.BloomIntensity = 0.25f;
+		Settings.bOverride_BloomThreshold = true;
+		Settings.BloomThreshold = 1.4f;
+
+		UE_LOG(LogSolCityEnvironment, Log,
+			TEXT("Post process: Manual exposure bias=0.0, AO=0.45 radius=120 power=1.2, saturation=0.97, contrast=1.02, bloom=0.25 threshold=1.4"));
 	}
 
 	UMaterialInterface* GroundMaterial = TryLoadMaterial(TEXT("/Game/Art/Materials/M_AnimeGrass.M_AnimeGrass"));
