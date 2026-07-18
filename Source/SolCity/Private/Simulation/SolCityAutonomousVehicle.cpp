@@ -31,9 +31,9 @@ ASolCityAutonomousVehicle::ASolCityAutonomousVehicle()
 	{
 		VehicleMesh->SetStaticMesh(AuthoredVehicleAsset.Object);
 		VehicleMesh->SetRelativeLocation(FVector(0.0f, 0.0f, -15.0f));
-		// The Blender car points toward local -Y. Rotate it so its nose matches
-		// the actor/navigation convention of local +X without rotating sensing.
-		VehicleMesh->SetRelativeRotation(FRotator(0.0f, 90.0f, 0.0f));
+		// After FBX axis conversion the imported visual needs a -90 yaw so its
+		// nose matches actor-local +X without rotating navigation or sensing.
+		VehicleMesh->SetRelativeRotation(FRotator(0.0f, -90.0f, 0.0f));
 		VehicleMesh->SetRelativeScale3D(FVector(1.0f));
 		CabinMesh->SetVisibility(false);
 		CabinMesh->SetHiddenInGame(true);

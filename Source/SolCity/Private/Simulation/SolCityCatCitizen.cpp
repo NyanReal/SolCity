@@ -51,9 +51,9 @@ ASolCityCatCitizen::ASolCityCatCitizen()
 	{
 		CatMesh->SetStaticMesh(AuthoredCatAsset.Object);
 		CatMesh->SetRelativeLocation(FVector(0.0f, 0.0f, -1.5f));
-		// The authored Blender cat faces local -Y. Keep the pedestrian actor's
-		// local +X path heading intact and rotate only its visual hierarchy.
-		CatMesh->SetRelativeRotation(FRotator(0.0f, 90.0f, 0.0f));
+		// After FBX axis conversion the imported visual needs a -90 yaw. Keep the
+		// pedestrian actor's local +X path heading and rotate only its hierarchy.
+		CatMesh->SetRelativeRotation(FRotator(0.0f, -90.0f, 0.0f));
 		CatMesh->SetRelativeScale3D(FVector(0.85f));
 		for (UStaticMeshComponent* FallbackPart : {HeadMesh.Get(), LeftEarMesh.Get(), RightEarMesh.Get(), TailMesh.Get()})
 		{

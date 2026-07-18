@@ -62,8 +62,6 @@ void ACityCameraPawn::SetupPlayerInputComponent(UInputComponent* PlayerInputComp
     PlayerInputComponent->BindAction(TEXT("ZoomOut"), IE_Pressed, this, &ACityCameraPawn::ZoomOut);
     PlayerInputComponent->BindAction(TEXT("RotateDrag"), IE_Pressed, this, &ACityCameraPawn::SetRotateDragPressed);
     PlayerInputComponent->BindAction(TEXT("RotateDrag"), IE_Released, this, &ACityCameraPawn::SetRotateDragReleased);
-    PlayerInputComponent->BindAction(TEXT("PitchDrag"), IE_Pressed, this, &ACityCameraPawn::SetPitchDragPressed);
-    PlayerInputComponent->BindAction(TEXT("PitchDrag"), IE_Released, this, &ACityCameraPawn::SetPitchDragReleased);
 }
 
 void ACityCameraPawn::ZoomIn() { Zoom(1.0f); }
@@ -90,7 +88,7 @@ void ACityCameraPawn::Rotate(float Value)
 
 void ACityCameraPawn::AdjustPitch(float Value)
 {
-    if (bPitchDragging && !FMath::IsNearlyZero(Value))
+    if (bRotateDragging && !FMath::IsNearlyZero(Value))
     {
         FRotator ArmRotation = SpringArm->GetRelativeRotation();
         const float LowerPitch = FMath::Min(MinCameraPitch, MaxCameraPitch);
@@ -102,5 +100,3 @@ void ACityCameraPawn::AdjustPitch(float Value)
 
 void ACityCameraPawn::SetRotateDragPressed() { bRotateDragging = true; }
 void ACityCameraPawn::SetRotateDragReleased() { bRotateDragging = false; }
-void ACityCameraPawn::SetPitchDragPressed() { bPitchDragging = true; }
-void ACityCameraPawn::SetPitchDragReleased() { bPitchDragging = false; }

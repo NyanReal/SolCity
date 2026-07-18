@@ -92,7 +92,13 @@ namespace
 
 	UMaterialInterface* TryLoadMaterial(const TCHAR* AssetPath)
 	{
-		return LoadObject<UMaterialInterface>(nullptr, AssetPath);
+		UMaterialInterface* Material = LoadObject<UMaterialInterface>(nullptr, AssetPath);
+		if (!Material)
+		{
+			UE_LOG(LogSolCityEnvironment, Error,
+				TEXT("Runtime material load failed: %s. Verify ProjectPackagingSettings cook directories."), AssetPath);
+		}
+		return Material;
 	}
 
 	void SpawnDistantGround(UWorld* World, UMaterialInterface* GroundMaterial)

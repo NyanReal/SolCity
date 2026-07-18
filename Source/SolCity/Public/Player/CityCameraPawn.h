@@ -32,8 +32,6 @@ private:
     void AdjustPitch(float Value);
     void SetRotateDragPressed();
     void SetRotateDragReleased();
-    void SetPitchDragPressed();
-    void SetPitchDragReleased();
 
     UPROPERTY(VisibleAnywhere)
     TObjectPtr<USceneComponent> Root;
@@ -71,5 +69,4 @@ private:
     float ForwardInput = 0.0f;
     float RightInput = 0.0f;
     bool bRotateDragging = false;
-    bool bPitchDragging = false;
 };
