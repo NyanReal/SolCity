@@ -28,8 +28,10 @@ private:
     void ZoomOut();
     void MoveForward(float Value);
     void MoveRight(float Value);
+    void MoveUp(float Value);
     void Rotate(float Value);
     void AdjustPitch(float Value);
+    void ToggleFreeFly();
     void SetRotateDragPressed();
     void SetRotateDragReleased();
 
@@ -54,8 +56,23 @@ private:
     UPROPERTY(EditAnywhere, Category="Camera")
     float ZoomStep = 2500.0f;
 
+    UPROPERTY(EditAnywhere, Category="Camera", meta=(ClampMin="0.1", UIMin="0.1"))
+    float ZoomInterpSpeed = 5.0f;
+
     UPROPERTY(EditAnywhere, Category="Camera")
     float PanSpeed = 5000.0f;
+
+    UPROPERTY(EditAnywhere, Category="Camera|Free Fly", meta=(ClampMin="100.0", UIMin="100.0"))
+    float FreeFlySpeed = 6000.0f;
+
+    UPROPERTY(EditAnywhere, Category="Camera|Free Fly", meta=(ClampMin="10.0", UIMin="10.0"))
+    float FreeFlySpeedStep = 1000.0f;
+
+    UPROPERTY(EditAnywhere, Category="Camera|Free Fly", meta=(ClampMin="100.0", UIMin="100.0"))
+    float MinFreeFlySpeed = 500.0f;
+
+    UPROPERTY(EditAnywhere, Category="Camera|Free Fly", meta=(ClampMin="100.0", UIMin="100.0"))
+    float MaxFreeFlySpeed = 30000.0f;
 
     UPROPERTY(EditAnywhere, Category="Camera", meta=(ClampMin="0.0", UIMin="0.0"))
     float PitchDragSpeed = 1.5f;
@@ -66,7 +83,20 @@ private:
     UPROPERTY(EditAnywhere, Category="Camera", meta=(ClampMin="-89.0", ClampMax="0.0", UIMin="-89.0", UIMax="0.0"))
     float MaxCameraPitch = -25.0f;
 
+    UPROPERTY(EditAnywhere, Category="Camera|Free Fly", meta=(ClampMin="-89.0", ClampMax="89.0", UIMin="-89.0", UIMax="89.0"))
+    float MinFreeFlyPitch = -89.0f;
+
+    UPROPERTY(EditAnywhere, Category="Camera|Free Fly", meta=(ClampMin="-89.0", ClampMax="89.0", UIMin="-89.0", UIMax="89.0"))
+    float MaxFreeFlyPitch = 89.0f;
+
     float ForwardInput = 0.0f;
     float RightInput = 0.0f;
+    float UpInput = 0.0f;
+    float DesiredZoom = 11000.0f;
     bool bRotateDragging = false;
+    bool bFreeFlyMode = false;
+    FTransform SavedCityActorTransform = FTransform::Identity;
+    FRotator SavedCityArmRotation = FRotator::ZeroRotator;
+    float SavedCityArmLength = 11000.0f;
+    float SavedCityDesiredZoom = 11000.0f;
 };

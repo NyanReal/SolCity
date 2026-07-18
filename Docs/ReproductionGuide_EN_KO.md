@@ -147,7 +147,12 @@ Run `Content/Python/SetupSolCityBuildingMaterials.py` separately whenever buildi
 - Keep cats off the road on a separate sidewalk waypoint graph and verify their visual forward direction against movement.
 - Use six traffic-signal phases across two conflicting movement axes.
 - Place modeled trees outside roads, river clearance, bridge approaches, and occupied building lots.
-- Support `W A S D` panning and mouse-wheel zoom. While holding the right mouse button, horizontal dragging rotates the camera and vertical dragging adjusts its pitch (`-80` to `-25` degrees by default).
+- Support `W A S D` panning and smoothly interpolated mouse-wheel zoom. While holding the right mouse button, horizontal dragging rotates the camera and vertical dragging adjusts its pitch (`-80` to `-25` degrees by default).
+- Press `F` to toggle free-flight mode without losing the saved city view. In free flight, use `W A S D` for camera-relative movement, `Q/E` for down/up, RMB drag to look, and the mouse wheel to change flight speed. Press `F` again to restore the saved city position, angle, and zoom.
+
+Keep the camera values aligned with `ACityCameraPawn`: initial arm length `11,000 cm`, city zoom range `800` to `48,000 cm`, wheel target step `2,500 cm`, and zoom interpolation speed `5.0`. City pan speed is `5,000 cm/s`. Free flight starts at `6,000 cm/s`; each wheel step changes speed by `1,000 cm/s`, clamped to `500` to `30,000 cm/s`, and its pitch range is `-89` to `89` degrees.
+
+The wheel must update a desired zoom value rather than directly snapping the spring-arm length. On entering free flight, save the city pawn transform, spring-arm rotation, current arm length, and desired zoom, then place the zero-length arm at the current camera world transform. Restore all saved values on the next `F` press so an interrupted zoom continues smoothly instead of jumping. Define `ToggleFreeFly` on `F` and `MoveUp` on `E = +1`, `Q = -1` in `Config/DefaultInput.ini`.
 
 ### 7. Environment, lighting, and visual parity
 
@@ -187,14 +192,17 @@ Legacy mode uses actor-level overrides only; it does not replace the production 
 
 ### 8. Build and verify
 
+The baseline verification is a normal editor build only; cooking and packaging are separate owner-run steps. Do not replace this command with `BuildCookRun` when only source validation is required.
+
 ```powershell
 & "C:\Program Files\Epic Games\UE_5.7\Engine\Build\BatchFiles\Build.bat" SolCityEditor Win64 Development -Project="$PWD\SolCity.uproject" -WaitMutex -NoHotReloadFromIDE
 ```
 
 Open `SolCity.uproject`, load `/Game/Maps/SolCity`, and start Play-in-Editor. Verify:
 
-- The mouse wheel zooms through the full range; `W A S D` panning remains responsive.
+- The mouse wheel smoothly zooms through the full range without abrupt distance steps; `W A S D` panning remains responsive.
 - Holding the right mouse button and dragging horizontally rotates the camera; dragging vertically adjusts the ground-view angle, stops at the configured pitch limits, and does not change zoom.
+- `F` enters free flight at the current camera transform; `W A S D`, `Q/E`, RMB look, and wheel speed work, and pressing `F` again restores the exact saved city view.
 - Landscape edges, distant ground, fog, and clouds produce no black perimeter.
 - Grass is muted rather than fluorescent and shaded facades retain ambient sky color.
 - River and spline roads are continuous; junctions and bridge approaches have no visible seams.
@@ -357,7 +365,12 @@ ImageGen 결과로 앞의 텍스처 3개를 교체할 때는 파일명을 유지
 - 고양이는 차도 밖의 별도 보도 웨이포인트 그래프를 사용하며 시각 전방과 이동 방향이 일치해야 한다.
 - 충돌하는 두 이동 축에 대해 6단계 신호 주기를 사용한다.
 - 나무는 도로, 강 여유 영역, 교량 진입부와 이미 사용 중인 건물 필지를 피해 배치한다.
-- `W A S D` 화면 이동과 마우스 휠 줌을 지원한다. 마우스 오른쪽 버튼을 누른 상태에서 수평 드래그는 카메라 회전, 수직 드래그는 피치 조절(기본 `-80`도~-`25`도)을 수행한다.
+- `W A S D` 화면 이동과 부드럽게 보간되는 마우스 휠 줌을 지원한다. 마우스 오른쪽 버튼을 누른 상태에서 수평 드래그는 카메라 회전, 수직 드래그는 피치 조절(기본 `-80`도~-`25`도)을 수행한다.
+- `F`를 눌러 저장된 시티 뷰를 잃지 않고 자유 비행 모드를 토글한다. 자유 비행에서는 `W A S D`로 카메라 기준 이동, `Q/E`로 하강/상승, RMB 드래그로 시점 회전, 휠로 비행 속도를 조절한다. `F`를 다시 누르면 저장한 시티 카메라 위치, 각도와 줌을 복원한다.
+
+카메라 수치는 `ACityCameraPawn`과 동일하게 유지한다. 초기 스프링암 길이는 `11,000cm`, 시티 줌 범위는 `800`~`48,000cm`, 휠 목표 간격은 `2,500cm`, 줌 보간 속도는 `5.0`이다. 시티 화면 이동 속도는 `5,000cm/s`다. 자유 비행은 `6,000cm/s`로 시작하며 휠 한 단계마다 `1,000cm/s`씩 `500`~`30,000cm/s` 범위에서 조절하고 피치는 `-89`도~`89`도로 제한한다.
+
+휠 입력으로 스프링암 길이를 즉시 바꾸지 말고 목표 줌 값을 변경한다. 자유 비행 진입 시 시티 Pawn Transform, 스프링암 회전, 현재 암 길이와 목표 줌을 저장하고 현재 카메라 월드 Transform 위치에서 암 길이를 0으로 만든다. 다음 `F` 입력에서 모든 값을 복원해 진행 중이던 줌도 튀지 않고 이어지게 한다. `Config/DefaultInput.ini`에는 `F`의 `ToggleFreeFly`와 `E = +1`, `Q = -1`의 `MoveUp` 매핑을 정의한다.
 
 ### 7. 환경, 조명과 비주얼 패리티
 
@@ -397,14 +410,17 @@ Legacy 모드는 액터 단위 오버라이드만 사용하며 실제 Static Mes
 
 ### 8. 빌드와 검증
 
+기본 검증은 일반 에디터 빌드만 수행한다. 쿠킹과 패키징은 프로젝트 소유자가 별도로 실행하는 단계이며 소스 검증만 필요할 때 아래 명령을 `BuildCookRun`으로 바꾸지 않는다.
+
 ```powershell
 & "C:\Program Files\Epic Games\UE_5.7\Engine\Build\BatchFiles\Build.bat" SolCityEditor Win64 Development -Project="$PWD\SolCity.uproject" -WaitMutex -NoHotReloadFromIDE
 ```
 
 `SolCity.uproject`를 열고 `/Game/Maps/SolCity`를 로드해 Play-in-Editor를 실행한다. 다음 내용을 검증한다.
 
-- 마우스 휠이 전체 범위에서 줌을 수행하고 `W A S D` 이동이 정상인지 확인한다.
+- 마우스 휠이 갑작스러운 거리 변화 없이 전체 범위에서 부드럽게 줌을 수행하고 `W A S D` 이동이 정상인지 확인한다.
 - 마우스 오른쪽 버튼을 누른 채 수평으로 드래그하면 카메라가 회전하고, 수직으로 드래그하면 지면을 바라보는 각도가 설정된 피치 제한 안에서 조절되며 줌은 바뀌지 않는지 확인한다.
+- `F`를 누르면 현재 카메라 화면을 유지한 채 자유 비행으로 진입하고 `W A S D`, `Q/E`, RMB 시점 회전과 휠 속도 조절이 동작하며, `F`를 다시 누르면 저장된 시티 뷰가 정확히 복원되는지 확인한다.
 - Landscape 가장자리, 원경 지면, 포그와 구름을 통해 검은 외곽이 보이지 않는지 확인한다.
 - 잔디가 형광색이 아니며 그늘진 건물 면에 앰비언트 스카이 컬러가 남는지 확인한다.
 - 강과 스플라인 도로가 연속적이며 교차로와 교량 진입부에 이음매가 없는지 확인한다.

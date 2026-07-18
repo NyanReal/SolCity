@@ -11,8 +11,9 @@ Unreal Engine 5.7 C++ city-builder simulation prototype. It creates a complete c
 ## Controls
 
 - `W A S D`: pan across the city
-- Mouse wheel: zoom in/out
+- Mouse wheel: smoothly zoom in/out
 - Hold right mouse button and drag: move horizontally to rotate and vertically to adjust the camera's ground-view angle
+- `F`: toggle free-flight camera mode; in free flight use `W A S D`, `Q/E`, RMB look, and the wheel to change flight speed
 
 ## Runtime systems
 
