@@ -1,42 +1,78 @@
-# Sol City Reproduction Guide
+# Sol City Reconstruction Guide / Sol City 리컨스트럭션 가이드
+
+This document describes the implementation that is currently checked into the repository. The English and Korean sections intentionally contain the same operational information.
+
+이 문서는 현재 저장소에 들어 있는 구현을 기준으로 작성한다. 영문과 한국어 섹션은 동일한 재구성 절차와 기준값을 설명한다.
+
+---
 
 ## English
 
-### 1. Target result
+### 1. Current target
 
-Reproduce a UE 5.7 C++ city-builder prototype with a peaceful, vividly colored Japanese-anime-background look and cats as citizens.
+Reconstruct a UE 5.7 C++ city-builder prototype with a bright Japanese-anime-background look, a dense central business district, low-density outer neighborhoods, road traffic, and cat citizens.
 
-The expected result includes:
+The authoritative defaults are defined on `ASolCityGenerator`:
 
-- A 36,000 x 36,000 cm city with mouse-wheel zoom from 800 to 48,000 cm.
-- An irregular procedural road hierarchy instead of a plain grid.
-- Spline roads, junction caps, modeled bridges, and continuous road connections.
-- Road-aware procedural lots with density and height biased toward the city center.
-- Three completed Blender/FBX buildings mixed evenly with Blender-authored modular buildings.
-- A persistent 505 x 505 Landscape, a lowered riverbed, and one continuous UV-animated river surface.
-- Autonomous cars on a directed road graph, six-phase traffic lights, and cats on a separate sidewalk graph.
-- A bright daytime environment with readable blue ambient light, fog, volumetric clouds, and restrained post-processing.
+| Setting | Current default |
+|---|---:|
+| Seed | `71527` |
+| City footprint | `144,000 x 144,000 cm` (1.44 x 1.44 km) |
+| River width | `6,000 cm` |
+| River surface | `Z = -90 cm` |
+| Target buildings | `1,500` (clamped to `12..2,400`) |
+| Runtime regeneration | Enabled in editor and at BeginPlay |
 
-### 2. Required software and project checkout
+The generated result includes:
+
+- An irregular hierarchy of 1-lane local roads, 2-lane collectors, and 4-lane arterials/bridges.
+- Separate raised sidewalks and 20 cm curbs, with curb and sidewalk intervals removed inside intersections.
+- A continuous river ribbon with retaining walls, riverside walks, railings, green banks, and bridge transitions.
+- Continuous district underlays plus slightly overlapping zoning tiles, eliminating the old dark grid gaps between grass cells.
+- Road-derived city blocks and parcels rather than point-only building scatter.
+- Residential, commercial, park, parking, and courtyard land uses.
+- Dense CBD massing, four authored mega-skyscraper landmarks, tapered towers, corner buildings, and connected twin towers.
+- Wide one-story authored suburban houses and more trees in outer neighborhoods.
+- Benches, bins, lamps, planters, bollards, wheel stops, billboards, rooftop equipment, cars, and detailed voxel cats.
+
+The validated default-seed runtime snapshot from 2026-07-19 is:
+
+```text
+blocks=113 buildings=1500/1500 parks=8 parking=9 courtyards=9
+tapered=180 twinSkybridge=4 megaCBD=5 outerLowRise=738
+authored suburban=184 authored megaCBD=4
+billboards=48 skybridges=6
+trees=1055 conifers=545 curbs=1366
+```
+
+Counts can change when the seed, target count, city diameter, or available assets change. The invariants are successful target completion, four authored mega-CBD landmarks when their assets are available, visible skybridges, four billboard material variants, and no HISM material-usage errors.
+
+### 2. Required software and checkout
 
 - Windows 10 or 11
 - Git
 - Unreal Engine 5.7
 - Visual Studio 2022 with **Desktop development with C++** and a Windows SDK
 - Blender 5.2 LTS
-- Python 3.12 for Blender MCP
-- Codex CLI when regenerating or editing Blender assets through MCP
+- Python 3.12 for the Blender MCP runtime
+- Codex with the configured `blender` MCP server when models must be regenerated
 
 ```powershell
 git clone https://github.com/NyanReal/SolCity.git
 Set-Location SolCity
 ```
 
-The checked-in Unreal assets, `.blend`, `.fbx`, preview PNG files, and source textures are sufficient to build and run the project. Blender MCP is required only when a model must be regenerated or edited.
+The checked-in `.uasset`, `.blend`, `.fbx`, preview PNG, and source texture files are sufficient to build and run the project. Blender MCP and the Unreal Python import scripts are needed when reconstructing or changing source assets.
 
-Enable **Python Script Plugin** and **Editor Scripting Utilities** in Unreal before running the project setup scripts.
+The project enables:
 
-### 3. Install Blender MCP
+- `ProceduralMeshComponent`
+- `PythonScriptPlugin`
+- `EditorScriptingUtilities`
+
+The default map is `/Game/Maps/SolCity` and the default game mode is `/Script/SolCity.SolCityGameMode`.
+
+### 3. Blender MCP setup
 
 ```powershell
 git clone https://github.com/djeada/blender-mcp-server.git Tools/blender-mcp-server
@@ -45,29 +81,31 @@ py -3.12 -m venv Tools/blender-mcp-server/.mcp-runtime
 & Tools/blender-mcp-server/.mcp-runtime/Scripts/python.exe -m pip install -e Tools/blender-mcp-server
 ```
 
-Build the Blender add-on zip in Git Bash:
+Build and install the Blender add-on:
 
 ```bash
 cd Tools/blender-mcp-server
 bash scripts/build_addon_zip.sh
 ```
 
-In Blender, open **Edit > Preferences > Add-ons > Install from Disk**, install `Tools/blender-mcp-server/dist/blender_mcp_bridge.zip`, and enable **Blender MCP Bridge**. Confirm `Listening on 127.0.0.1:9876` in the 3D Viewport **MCP** sidebar.
+Install `Tools/blender-mcp-server/dist/blender_mcp_bridge.zip` from **Edit > Preferences > Add-ons > Install from Disk**, enable **Blender MCP Bridge**, and confirm `Listening on 127.0.0.1:9876` in the viewport MCP sidebar.
 
-Register the server with Codex, changing the path when necessary:
+Register the server with Codex, adjusting the repository path as needed:
 
 ```powershell
 codex mcp add blender -- D:\github\SolCity\Tools\blender-mcp-server\.mcp-runtime\Scripts\blender-mcp-server.exe
 codex mcp list
 ```
 
-Restart Codex if the Blender tools are not visible. Inspect the connected scene before editing and do not replace a Blender session owned by another task.
+Always inspect the connected Blender scene before editing. Use a separate Blender process when ownership of an existing scene is uncertain.
 
-### 4. Blender modeling and FBX rules
+### 4. Blender authoring and FBX validation
 
-Make real Blender changes through MCP. Writing an unexecuted Python file is not a completed modeling pass. Use metric units with `scale_length = 1.0` and keep ground contact near `Z = 0`.
+Follow `Docs/BlenderMCP_Modeling_Guide.md`. A Blender task is complete only after the scene was actually modified through MCP, the preview was inspected, and the FBX was re-imported into a clean Blender 5.2 scene.
 
-Each completed building in `Content/Art/Buildings` must have matching deliverables:
+Use metric units, `scale_length = 1.0`, ground contact at `Z = 0`, selected mesh export, `axis_forward = -Y`, and `axis_up = Z`. Store reusable creation and verification scripts in `Tools/blender-mcp-server/scripts/`.
+
+Building deliverables belong in `Content/Art/Buildings/` and props in `Content/Art/Props/`. Each kit must keep matching names:
 
 ```text
 SM_SolCity_<Name>_01.blend
@@ -75,186 +113,249 @@ SM_SolCity_<Name>_01.fbx
 SM_SolCity_<Name>_01_preview.png
 ```
 
-Gameplay props belong in `Content/Art/Props`. Export selected mesh objects only, apply unit scale, and use `axis_forward = -Y` and `axis_up = Z`. Import multi-object assets with **Combine Meshes**, generated lightmap UVs, and automatic collision.
+Current expansion kits:
 
-Create and revise cats, cars, bridges, road pieces, junctions, and trees through the same Blender MCP workflow. Follow `Docs/BlenderMCP_Modeling_Guide.md` and record each changed `.blend`, `.fbx`, preview, dimensions, axis convention, and validation result in `Docs/BlenderMCP_Asset_Log.md`.
+| Kit | Internal meshes | Validated bounds |
+|---|---|---|
+| `SM_SolCity_SuburbanHouses_01` | `SM_SolCity_SuburbanHouse_01..04` | each `17.250 x 12.798 x 6.640 m` |
+| `SM_SolCity_Conifers_01` | `SM_SolCity_Conifer_01` | `4.972 x 5.100 x 7.568 m` |
+|  | `SM_SolCity_Conifer_02` | `4.192 x 4.300 x 9.585 m` |
+| `SM_SolCity_VoxelCat_01` | one mesh | `1.250 x 1.896 x 1.198 m` |
+| `SM_SolCity_MegaSkyscrapers_01` | `SM_SolCity_MegaGlassCurtainwall_01` | `48.000 x 42.425 x 225.000 m` |
+|  | `SM_SolCity_MegaNewYorkSetback_01` | `52.000 x 44.700 x 228.500 m` |
+|  | `SM_SolCity_MegaGeometricTwist_01` | `49.889 x 52.336 x 223.500 m` |
+|  | `SM_SolCity_MegaPodiumCrown_01` | `56.000 x 54.500 x 227.500 m` |
 
-Preserve the proportions of every completed Blender building. If a city-scale correction is required, derive one uniform XYZ scale from the standard road-lane width. Never calculate a separate Z scale from `target height / source mesh height`.
+All listed meshes validate with non-degenerate bounds and `minZ = 0` after clean FBX re-import.
 
-Variable-height buildings must stack these authored FBX modules instead of stretching a completed mesh:
+Import the house, conifer, and mega-tower kits with **Combine Meshes = false**. Import the voxel cat with **Combine Meshes = true**. Generate lightmap UVs and automatic collision.
+
+Variable-height procedural buildings use authored modules:
 
 - `SM_SolCity_BuildingBase_01`
 - `SM_SolCity_BuildingMiddle_01`
 - `SM_SolCity_BuildingCrown_01`
+- `SM_SolCity_CornerBase_01`
+- `SM_SolCity_CornerMiddle_01`
+- `SM_SolCity_CornerCrown_01`
 
-Windows, frames, entrances, ledges, and roof details are modeled into these modules. Do not rebuild their walls from cubes or apply the old `M_AnimeFacade` window-wall texture to boxes.
+Optional roof and landmark modules include HVAC, water tank, solar, antenna, pergola, helipad, warning beacon, and skybridge connector meshes. Completed ordinary buildings retain uniform XYZ scaling. Mega-CBD landmarks are the deliberate exception: XY scale fits the parcel while vertical scale is kept at least `0.86` so their skyline height remains monumental.
 
-Keep FBX material-slot names stable. Blender materials are authoring references; production rendering uses native Unreal material instances assigned by slot name.
+The car and cat FBXs use the Blender `-Y` forward convention. Their Unreal mesh components apply a relative `-90 degree` yaw while actor navigation remains Unreal `+X` forward. The active cat asset is `SM_SolCity_VoxelCat_01` at runtime scale `0.62`.
 
-Forward-axis rules:
+### 5. Unreal asset reconstruction
 
-- Road spline meshes are longitudinally subdivided and Unreal `+X` forward.
-- Export the car with the Blender `-Y` forward convention; after FBX axis conversion, apply a mesh-relative `-90 degrees` yaw verified in the packaged build while actor movement and sensing remain Unreal `+X` forward.
-- Export the cat with the same Blender convention; after FBX axis conversion, apply a mesh-relative `-90 degrees` yaw so the visible cat follows the sidewalk tangent while navigation remains actor-local `+X`.
-
-Model bridge decks, piers, railings, and approach transitions carefully in Blender. The deck must align with the road graph and lane width, piers must clear the river path, and the approaches must not leave visible road or Landscape gaps.
-
-For every exported model, inspect the rendered preview and re-import the FBX into a clean Blender 5.2 scene. Verify mesh count, non-degenerate bounds, ground contact, dimensions, forward direction, and error-free import.
-
-### 5. Unreal asset and material setup
-
-Source textures are stored in `Content/Art/Source`:
-
-- `T_AnimeGrass.png`
-- `T_AnimeAsphalt.png`
-- `T_AnimeWater.png`
-- `T_AnimeFacade.png` retained only as a source/legacy asset
-
-ImageGen outputs may replace the first three textures while retaining their filenames. Run these scripts from **Tools > Execute Python Script** in order:
+Checked-in Unreal assets normally require no setup. To reconstruct assets from source, run the scripts from **Tools > Execute Python Script** or with `UnrealEditor-Cmd.exe` in this order:
 
 1. `Content/Python/SetupSolCityAssets.py`
-2. `Content/Python/TuneSolCityEnvironment.py`
+2. `Content/Python/SetupSolCitySurfaceAssets.py`
 3. `Content/Python/ImportSolCityBuildingModules.py`
-4. `Content/Python/ImportSolCityProps.py`
-5. `Content/Python/CreateSolCitySplineMaterials.py`
-6. `Content/Python/FinalizeSolCityMaterials.py`
-7. `Content/Python/BuildSolCityLandscape.py`
+4. `Content/Python/ImportSolCityExtendedBuildingModules.py`
+5. `Content/Python/ImportSolCityProps.py`
+6. `Content/Python/ImportSolCityUrbanProps.py`
+7. `Content/Python/ImportSolCityExpansionAssets.py`
+8. `Content/Python/SetupSolCityBillboard.py`
+9. `Content/Python/CreateSolCitySplineMaterials.py`
+10. `Content/Python/SetupSolCityBuildingMaterials.py`
+11. `Content/Python/FinalizeSolCityMaterials.py`
+12. `Content/Python/TuneSolCityEnvironment.py`
 
-`SetupSolCityAssets.py` imports the three completed buildings with `import_materials = False` and calls `SetupSolCityBuildingMaterials.py`. The material script creates or updates:
+`ImportSolCityExpansionAssets.py` imports 11 meshes: four houses, two conifers, four mega towers, and one voxel cat. It also enables instanced-static-mesh usage on imported base materials.
 
-- `/Game/Art/Buildings/Materials/M_SolCity_Building_Master`
-- 28 native material instances for the exact authored slots
-- MidRise `10/10`, CornerRetail `9/9`, and SteppedTower `9/9` deterministic assignments
+`SetupSolCityBillboard.py` imports the billboard, four language-free ad textures, one two-sided HISM-compatible master, and four swappable material instances. The mesh uses frame slot `0` and ad slot `1`. The script currently contains `PROJECT = Path(r"D:\github\SolCity")`; change that value when the checkout is elsewhere.
 
-The master is opaque and exposes base color, metallic, roughness, specular, emissive, normal, roughness-texture, and macro-variation controls. Missing, renamed, duplicate, and unmapped slots are logged. Re-running the script updates the same assets and assignments without recreating FBX legacy materials.
+Source textures are under `Content/Art/Source/`. Runtime textures and materials are under `/Game/Art/Generated`, `/Game/Art/Materials`, `/Game/Art/Buildings`, and `/Game/Art/Props`.
 
-Run `Content/Python/SetupSolCityBuildingMaterials.py` separately whenever building FBXs or their slots change. Its `import_or_reimport_buildings()` helper performs an in-place FBX import with material creation disabled, then restores the native slot mappings.
+`Config/DefaultGame.ini` force-cooks maps, materials, generated art, props, and buildings because several runtime assets are loaded by string path.
 
-`TuneSolCityEnvironment.py` reduces the fluorescent grass appearance using a muted green tint, high roughness, and low specular response. Run it again whenever the grass base material is regenerated.
+#### Landscape note
 
-`Config/DefaultGame.ini` force-cooks `/Game/Maps`, `/Game/Art/Materials`, `/Game/Art/Generated`, `/Game/Art/Props`, and `/Game/Art/Buildings`. Keep these entries because runtime C++ loads several assets by string path, which is not a reliable dependency source for the cooker. This also guarantees that `M_AnimeWater` and `T_AnimeWater` are included in packaged builds.
+The current runtime generator is authoritative for the 1.44 km ground, zoning surfaces, river, banks, walls, and distant-ground transition. `USolCityLandscapeLibrary` defaults to `144000, 6000, -90`, but `Content/Python/BuildSolCityLandscape.py` still passes the legacy `36000, 2400, -90` arguments. Do not run that script unchanged for the current city. If a persistent Landscape must be rebuilt, update the call to:
 
-### 6. World generation and runtime behavior
+```python
+unreal.SolCityLandscapeLibrary.rebuild_sol_city_landscape(144000.0, 6000.0, -90.0)
+```
 
-- Generate an asymmetrical arterial spine, collector loop, and curved district branches.
-- Render roads with `USplineComponent` and `USplineMeshComponent`; use junction meshes to cover branch seams and spline endpoints.
-- Sample lots deterministically near roads, reject road/river/building overlaps, vary footprints and rotations, and increase density toward the center.
-- Mix all three completed authored buildings evenly and deterministically. Do not hide a type behind a rare style, height, or random-chance gate.
-- Use uniform lane-width-derived scaling for completed buildings and HISM-stacked Base/Middle/Crown meshes for variable-height buildings.
-- Use the persistent Landscape instead of ground tiles. The current Landscape uses 4 x 4 components, 2 x 2 sections per component, and 63 quads per section, producing 505 x 505 vertices across 36,000 cm.
-- Carve the riverbed to `-230 cm`, place the water surface at `-90 cm`, and render the river as one continuous UV-animated ribbon.
-- Keep cars on a directed two-lane graph with speed limits, following distance, red-light stops, and correct actor-forward alignment.
-- Keep cats off the road on a separate sidewalk waypoint graph and verify their visual forward direction against movement.
-- Use six traffic-signal phases across two conflicting movement axes.
-- Place modeled trees outside roads, river clearance, bridge approaches, and occupied building lots.
-- Support `W A S D` panning and smoothly interpolated mouse-wheel zoom. While holding the right mouse button, horizontal dragging rotates the camera and vertical dragging adjusts its pitch (`-80` to `-25` degrees by default).
-- Press `F` to toggle free-flight mode without losing the saved city view. In free flight, use `W A S D` for camera-relative movement, `Q/E` for down/up, RMB drag to look, and the mouse wheel to change flight speed. Press `F` again to restore the saved city position, angle, and zoom.
+### 6. Current procedural generation
 
-Keep the camera values aligned with `ACityCameraPawn`: initial arm length `11,000 cm`, city zoom range `800` to `48,000 cm`, wheel target step `2,500 cm`, and zoom interpolation speed `5.0`. City pan speed is `5,000 cm/s`. Free flight starts at `6,000 cm/s`; each wheel step changes speed by `1,000 cm/s`, clamped to `500` to `30,000 cm/s`, and its pitch range is `-89` to `89` degrees.
+`ASolCityGenerator::RegenerateCity()` runs in this order:
 
-The wheel must update a desired zoom value rather than directly snapping the spring-arm length. On entering free flight, save the city pawn transform, spring-arm rotation, current arm length, and desired zoom, then place the zero-length arm at the current camera world transform. Restore all saved values on the next `F` press so an interrupted zoom continues smoothly instead of jumping. Define `ToggleFreeFly` on `F` and `MoveUp` on `E = +1`, `Q = -1` in `Config/DefaultInput.ini`.
+1. Clear generated components and reset deterministic state.
+2. Create HISM and spline instance groups.
+3. Generate ground, river, banks, walls, walks, rails, and distant transitions.
+4. Generate the complete road hierarchy.
+5. Generate curb and sidewalk strips after all roads are known.
+6. Generate district surfaces.
+7. Reserve and place traffic furniture, including billboards.
+8. Extract blocks, subdivide parcels, reserve open spaces, and place buildings.
+9. Place the authored bridge.
+10. Place broadleaf and conifer trees.
+11. Finalize HISM trees and emit validation counts.
 
-### 7. Environment, lighting, and visual parity
+Road geometry uses a 360 cm lane ruler:
 
-When no authored equivalent exists, the runtime creates the environment actor. When one already exists, it is reused so level reloads and PIE do not duplicate atmosphere, sun, Sky Light, fog, clouds, or post-process volumes.
+| Class | Marked lanes | Road width | Sidewalk width per side |
+|---|---:|---:|---:|
+| Local | 1 | `360 cm` | `160 cm` |
+| Collector | 2 | `720 cm` | `240 cm` |
+| Arterial / bridge | 4 | `1,440 cm` | `320 cm` |
 
-Directional Light settings:
+Road surface is at `Z = 8 cm`; sidewalk top is `Z = 23 cm`; curb width is `20 cm`. Curbs and sidewalks are not created inline with each road. The generator first records all road segments, finds 2D segment intersections, subtracts an intersection-clearance interval from each edge strip, and creates only the visible remainder. This prevents curbs from crossing intersections.
 
-- Location `(0, 0, 8000)`
-- Rotation Roll/X `0 degrees`, Pitch/Y `-166 degrees`, Yaw/Z `-76 degrees`
-- Scale `(2.5, 2.5, 2.5)`
-- Intensity `3.4`, indirect intensity `1.05`
-- Source angle `1.0`, contact-shadow length `0.035`, contact-shadow intensity `0.65`
-- Movable, Atmosphere Sun Light enabled, cloud shadows enabled
+The zoning system creates continuous residential underlays first, then residential, commercial, park, or parking cells. Cell dimensions overlap their pitch by 16 cm, so the distant ground cannot appear as dark seams between cells.
 
-Use a movable real-time Sky Light with blue ambient contribution and a non-black lower hemisphere so shaded facades remain readable. Use Sky Atmosphere, Exponential Height Fog with volumetric fog, and UE 5.7's built-in simple Volumetric Cloud material.
+`SolCityLotLayout` extracts closed blocks from road centerlines and subdivides street-front parcels. Building placement rejects city-edge, river, road, occupied-building, billboard, park, parking, and courtyard overlaps. Open/disconnected road graphs receive deterministic frontage-lot fallback placement rather than city-wide point scatter.
 
-The unbound runtime Post Process Volume uses manual exposure with physical-camera exposure disabled, exposure bias `0.0`, AO intensity `0.45`, AO radius `120`, AO power `1.2`, saturation `0.97`, contrast `1.02`, bloom intensity `0.25`, and bloom threshold `1.4`.
+Procedural building styles are:
 
-A finite Landscape exposes the black world beyond its edge. Keep the large low distant-ground plane below and outside the playable Landscape, disable its collision and shadows, and use height fog to blend it into the horizon. Gameplay and navigation remain on the Landscape.
+- Setback mid-rise.
+- Authored corner modules with an L-shaped fallback.
+- Monotonically tapered tower; upper floors never expand beyond lower floors.
+- Courtyard cluster.
+- Authored suburban house or low-rise row-house fallback.
+- Symmetric twin towers with one or two elevated skybridges.
+- Super-scale CBD tower with a broad podium and monotonic setbacks.
 
-For controlled material comparison, run `Content/Python/BuildSolCityLookDev.py` in both modes:
+Before ordinary frontage lots consume the center, the generator reserves large central block interiors for four authored mega-skyscraper variants. Additional eligible CBD lots can use the procedural mega style. Large roofs receive appropriate helipads, water tanks, HVAC, solar, antenna/pergola units, and warning beacons.
+
+Outer neighborhoods use wider/deeper parcels, reduced building plates, four colored one-story house variants, and higher tree preference. Up to 38 percent of eligible outer-neighborhood tree placements use one of the two conifers.
+
+Billboards are placed before buildings so their sites remain visible. At the current diameter the target is 48. Both road sides are sampled, the opposite side receives a 180-degree yaw correction, placement Z matches the ground zone, and the four language-free materials rotate evenly.
+
+### 7. Simulation, camera, and environment
+
+Cars use a directed road graph with lane speed limits, acceleration/braking, following distance, red-light stopping, and six traffic-signal phases across two conflicting axes. Cats use a separate pedestrian waypoint graph generated from the visible sidewalk strips and never intentionally traverse vehicle lanes.
+
+Camera defaults:
+
+| Setting | Value |
+|---|---:|
+| Initial spring arm | `11,000 cm` |
+| City zoom range | `800..48,000 cm` |
+| Wheel zoom step | `2,500 cm` |
+| Zoom interpolation | `5.0` |
+| Pan speed | `5,000 cm/s` |
+| City pitch | `-80..-25 degrees` |
+| Free-flight speed | `6,000 cm/s` |
+| Free-flight speed range | `500..30,000 cm/s` |
+| Free-flight pitch | `-89..89 degrees` |
+
+Use `W A S D` to pan, RMB drag to rotate/change pitch, the wheel to zoom, and `F` to toggle free flight. In free flight use `Q/E` for down/up and the wheel to change speed. Returning from free flight restores the saved city transform, arm rotation, current arm length, and desired zoom.
+
+The runtime creates or reuses Sky Atmosphere, directional sun, Sky Light, Exponential Height Fog, Volumetric Cloud, and an unbound Post Process Volume. It uses manual exposure, AO `0.45`, AO radius `120`, AO power `1.2`, saturation `0.97`, contrast `1.02`, bloom `0.25`, and bloom threshold `1.4`. A large collisionless, shadowless plane at `Z = -280 cm` hides the finite-world edge behind height fog.
+
+### 8. Build and verification
+
+Build the editor target:
 
 ```powershell
-$Editor = "C:\Program Files\Epic Games\UE_5.7\Engine\Binaries\Win64\UnrealEditor-Cmd.exe"
-& $Editor "$PWD\SolCity.uproject" -ExecutePythonScript="$PWD\Content\Python\BuildSolCityLookDev.py" -SolCityLookDevStage=legacy -unattended -nop4 -nosplash -DDC-ForceMemoryCache -NoZenLoader
-& $Editor "$PWD\SolCity.uproject" -ExecutePythonScript="$PWD\Content\Python\BuildSolCityLookDev.py" -SolCityLookDevStage=native -unattended -nop4 -nosplash -DDC-ForceMemoryCache -NoZenLoader
+& "C:\Program Files\Epic Games\UE_5.7\Engine\Build\BatchFiles\Build.bat" `
+  SolCityEditor Win64 Development "$PWD\SolCity.uproject" `
+  -WaitMutex -NoHotReloadFromIDE
 ```
 
-The isolated `/Game/Maps/SolCityLookDev` scene uses a 53 mm full-frame camera, fixed three-light setup, reflection capture, neutral unlit background, and manual exposure. It writes matching 1600 x 900 captures to:
-
-```text
-Saved/VisualParity/SolCity_CornerRetail_lookdev_before.png
-Saved/VisualParity/SolCity_CornerRetail_lookdev_after.png
-```
-
-Legacy mode uses actor-level overrides only; it does not replace the production mesh assignments.
-
-### 8. Build and verify
-
-The baseline verification is a normal editor build only; cooking and packaging are separate owner-run steps. Do not replace this command with `BuildCookRun` when only source validation is required.
+Run a headless BeginPlay generation smoke test:
 
 ```powershell
-& "C:\Program Files\Epic Games\UE_5.7\Engine\Build\BatchFiles\Build.bat" SolCityEditor Win64 Development -Project="$PWD\SolCity.uproject" -WaitMutex -NoHotReloadFromIDE
+& "C:\Program Files\Epic Games\UE_5.7\Engine\Binaries\Win64\UnrealEditor-Cmd.exe" `
+  "$PWD\SolCity.uproject" -game -nullrhi -nosound -unattended `
+  -stdout -FullStdOutLogOutput "-ExecCmds=quit"
 ```
 
-Open `SolCity.uproject`, load `/Game/Maps/SolCity`, and start Play-in-Editor. Verify:
+Inspect `Saved/Logs/SolCity.log` for:
 
-- The mouse wheel smoothly zooms through the full range without abrupt distance steps; `W A S D` panning remains responsive.
-- Holding the right mouse button and dragging horizontally rotates the camera; dragging vertically adjusts the ground-view angle, stops at the configured pitch limits, and does not change zoom.
-- `F` enters free flight at the current camera transform; `W A S D`, `Q/E`, RMB look, and wheel speed work, and pressing `F` again restores the exact saved city view.
-- Landscape edges, distant ground, fog, and clouds produce no black perimeter.
-- Grass is muted rather than fluorescent and shaded facades retain ambient sky color.
-- River and spline roads are continuous; junctions and bridge approaches have no visible seams.
-- Bridge piers and deck align with the river and road lanes.
-- Completed buildings retain their original proportions and all three types appear in a balanced mix.
-- Modular buildings use correctly scaled Base/Middle/Crown floors rather than stretched boxes.
-- Native material slots survive a repeated setup or FBX reimport.
-- Cars face their travel direction, maintain lanes, and stop at red lights.
-- Cats remain on sidewalks and face their movement direction.
-- The LookDev legacy/native captures use identical framing and exposure.
+- `SolCity parcel layout`
+- `SolCity expansion authored buildings`
+- `SolCity urban props`
+- `SolCity authored modules`
+- `SolCity streetscape`
 
-Run the building material setup twice when validating idempotence; both runs should report `28/28` assigned slots and zero errors.
+There must be no `missing bUsedWithInstancedStaticMeshes`, `Default Material will be used`, Python traceback, assertion, or fatal error.
+
+Visual PIE verification:
+
+- No dark grid lines between green district cells.
+- Curbs and sidewalks stop before intersection road surfaces.
+- Local, collector, and arterial roads read as distinct widths and markings.
+- Four authored mega-tower silhouettes are present in the CBD.
+- Twin towers have clearly visible elevated connectors.
+- Outer neighborhoods contain wide roofed one-story houses in several colors.
+- Billboards face the road and visibly rotate four non-verbal ads.
+- Conifers are mixed among broadleaf trees.
+- The voxel cat has visible eyes, ears, muzzle, whiskers, paws, and segmented tail and follows sidewalk direction.
+- River water, green bank, retaining wall, promenade, rail, bridge, and concrete transitions do not leave open gaps.
+
+For each regenerated Blender asset, also inspect its `_preview.png` and repeat the clean Blender 5.2 FBX import validation before accepting it.
 
 ---
 
 ## 한국어
 
-### 1. 재현 목표
+### 1. 현재 목표 결과
 
-평화롭고 선명한 일본 애니메이션 배경풍의 UE 5.7 C++ 시티빌더 프로토타입을 재현한다. 시민은 고양이다.
+밝은 일본 애니메이션 배경풍의 UE 5.7 C++ 도시 빌더 프로토타입을 재구성한다. 도심에는 고밀도 CBD가 있고 외곽에는 저밀도 주거지가 있으며, 차량 교통과 고양이 시민이 별도 네트워크를 이용한다.
 
-최종 결과에는 다음 내용이 포함된다.
+`ASolCityGenerator`의 권위 기본값은 다음과 같다.
 
-- 36,000 x 36,000cm 규모의 도시와 800~48,000cm 마우스 휠 줌 범위
-- 단순 격자가 아닌 비정형 절차적 도로 계층
-- 스플라인 도로, 교차로 캡, 모델링된 교량과 자연스럽게 이어지는 도로 연결부
-- 도로를 기준으로 배치되고 중심부로 갈수록 밀도와 높이가 증가하는 절차적 필지
-- 완성형 Blender/FBX 건물 3종과 Blender 제작 적층 모듈 건물의 균형 잡힌 혼합
-- 505 x 505 영구 Landscape, 낮아진 강바닥과 하나로 이어진 UV 애니메이션 수면
-- 방향성 도로 그래프를 주행하는 자동차, 6단계 신호등과 별도 보도 그래프를 이용하는 고양이
-- 푸른 앰비언트가 살아 있는 밝은 주간 조명, 포그, 볼류메트릭 클라우드와 절제된 후처리
+| 설정 | 현재 기본값 |
+|---|---:|
+| 시드 | `71527` |
+| 도시 영역 | `144,000 x 144,000 cm` (1.44 x 1.44 km) |
+| 강 폭 | `6,000 cm` |
+| 수면 높이 | `Z = -90 cm` |
+| 목표 건물 수 | `1,500` (`12..2,400` 범위) |
+| 런타임 재생성 | 에디터와 BeginPlay에서 활성화 |
 
-### 2. 필수 소프트웨어와 프로젝트 받기
+현재 결과에는 다음 요소가 포함된다.
+
+- 1차로 골목길, 2차로 집산도로, 4차로 간선도로와 교량으로 구성된 비정형 도로 계층.
+- 차도보다 높은 별도 인도와 20cm 경석. 교차로 내부에는 경석과 인도를 생성하지 않는다.
+- 하나로 이어진 강, 옹벽, 강변 산책로, 난간, 녹지 둔치와 교량 진입부.
+- 연속 지면 받침과 서로 약간 겹치는 용도지역 셀. 예전 녹지 격자 틈은 제거됐다.
+- 포인트 산포가 아니라 도로에서 추출한 도시 블록과 대지 필지에 따른 건물 배치.
+- 주거·상업·공원·주차장·중정 용도지역.
+- 고밀도 CBD, authored 초대형 마천루 4종, 상부가 좁아지는 타워, 코너 건물과 공중 연결 쌍둥이 건물.
+- 외곽의 넓은 단층 주택과 풍부한 수목.
+- 벤치, 쓰레기통, 가로등, 화분, 볼라드, 주차 스토퍼, 광고판, 옥상 설비, 차량과 상세 복셀 고양이.
+
+2026-07-19 기본 시드 검증 결과는 다음과 같다.
+
+```text
+blocks=113 buildings=1500/1500 parks=8 parking=9 courtyards=9
+tapered=180 twinSkybridge=4 megaCBD=5 outerLowRise=738
+authored suburban=184 authored megaCBD=4
+billboards=48 skybridges=6
+trees=1055 conifers=545 curbs=1366
+```
+
+시드, 목표 건물 수, 도시 크기나 로드 가능한 에셋이 바뀌면 정확한 수치는 달라질 수 있다. 목표 건물 수 달성, authored 초대형 CBD 4종, 보이는 공중 연결부, 광고 재질 4종과 HISM 재질 오류 0건을 핵심 불변 조건으로 본다.
+
+### 2. 필수 소프트웨어와 체크아웃
 
 - Windows 10 또는 11
 - Git
 - Unreal Engine 5.7
-- **Desktop development with C++**와 Windows SDK를 설치한 Visual Studio 2022
+- **Desktop development with C++**와 Windows SDK가 설치된 Visual Studio 2022
 - Blender 5.2 LTS
-- Blender MCP용 Python 3.12
-- Blender 모델을 MCP로 재생성하거나 수정할 때 사용할 Codex CLI
+- Blender MCP 런타임용 Python 3.12
+- 모델을 다시 만들 때 사용할 `blender` MCP가 설정된 Codex
 
 ```powershell
 git clone https://github.com/NyanReal/SolCity.git
 Set-Location SolCity
 ```
 
-저장소에 포함된 Unreal 에셋, `.blend`, `.fbx`, 미리보기 PNG와 원본 텍스처만으로 프로젝트를 빌드하고 실행할 수 있다. Blender MCP는 모델을 다시 만들거나 수정할 때만 필요하다.
+저장소의 `.uasset`, `.blend`, `.fbx`, 프리뷰 PNG와 원본 텍스처만으로 프로젝트를 빌드하고 실행할 수 있다. 원본 에셋을 재구성하거나 수정할 때만 Blender MCP와 Unreal Python 임포트 스크립트가 필요하다.
 
-프로젝트 셋업 스크립트를 실행하기 전에 Unreal에서 **Python Script Plugin**과 **Editor Scripting Utilities**를 활성화한다.
+프로젝트는 다음 플러그인을 사용한다.
 
-### 3. Blender MCP 설치
+- `ProceduralMeshComponent`
+- `PythonScriptPlugin`
+- `EditorScriptingUtilities`
+
+기본 맵은 `/Game/Maps/SolCity`, 기본 게임 모드는 `/Script/SolCity.SolCityGameMode`다.
+
+### 3. Blender MCP 설정
 
 ```powershell
 git clone https://github.com/djeada/blender-mcp-server.git Tools/blender-mcp-server
@@ -263,29 +364,31 @@ py -3.12 -m venv Tools/blender-mcp-server/.mcp-runtime
 & Tools/blender-mcp-server/.mcp-runtime/Scripts/python.exe -m pip install -e Tools/blender-mcp-server
 ```
 
-Git Bash에서 Blender 애드온 ZIP을 만든다.
+Blender 애드온을 빌드하고 설치한다.
 
 ```bash
 cd Tools/blender-mcp-server
 bash scripts/build_addon_zip.sh
 ```
 
-Blender에서 **Edit > Preferences > Add-ons > Install from Disk**를 열어 `Tools/blender-mcp-server/dist/blender_mcp_bridge.zip`을 설치하고 **Blender MCP Bridge**를 활성화한다. 3D Viewport의 **MCP** 사이드바에서 `Listening on 127.0.0.1:9876`을 확인한다.
+**Edit > Preferences > Add-ons > Install from Disk**에서 `Tools/blender-mcp-server/dist/blender_mcp_bridge.zip`을 설치하고 **Blender MCP Bridge**를 활성화한다. 뷰포트 MCP 사이드바에 `Listening on 127.0.0.1:9876`이 표시되는지 확인한다.
 
-필요하면 실제 경로에 맞게 수정해 Codex에 서버를 등록한다.
+저장소 위치에 맞게 경로를 조정해 Codex에 서버를 등록한다.
 
 ```powershell
 codex mcp add blender -- D:\github\SolCity\Tools\blender-mcp-server\.mcp-runtime\Scripts\blender-mcp-server.exe
 codex mcp list
 ```
 
-Blender 도구가 보이지 않으면 Codex를 다시 시작한다. 수정 전 연결된 장면을 확인하고 다른 작업이 사용하는 Blender 세션을 교체하지 않는다.
+편집하기 전에 연결된 Blender 장면을 반드시 검사한다. 기존 장면의 소유 작업이 불명확하면 별도 Blender 프로세스를 사용한다.
 
-### 4. Blender 모델링과 FBX 규칙
+### 4. Blender 제작과 FBX 검증
 
-실제 Blender 변경은 MCP를 통해 실행한다. 실행되지 않은 Python 파일만 작성한 상태는 모델링 완료로 보지 않는다. 미터 단위와 `scale_length = 1.0`을 사용하고 지면 접점은 `Z = 0` 근처에 둔다.
+`Docs/BlenderMCP_Modeling_Guide.md`를 따른다. MCP로 실제 장면을 변경하고, 프리뷰를 직접 검사하고, FBX를 깨끗한 Blender 5.2 장면에 재임포트해야 제작이 완료된 것이다.
 
-`Content/Art/Buildings`의 완성형 건물은 같은 이름의 결과물 3개를 가져야 한다.
+미터 단위, `scale_length = 1.0`, `Z = 0` 지면 접촉, 선택 메시 내보내기, `axis_forward = -Y`, `axis_up = Z`를 사용한다. 재사용 가능한 생성·검증 스크립트는 `Tools/blender-mcp-server/scripts/`에 저장한다.
+
+건물은 `Content/Art/Buildings/`, 프랍은 `Content/Art/Props/`에 두고 세 결과물 이름을 맞춘다.
 
 ```text
 SM_SolCity_<Name>_01.blend
@@ -293,143 +396,176 @@ SM_SolCity_<Name>_01.fbx
 SM_SolCity_<Name>_01_preview.png
 ```
 
-게임플레이 소품은 `Content/Art/Props`에 둔다. 선택한 메시 오브젝트만 내보내고 단위 스케일을 적용하며 `axis_forward = -Y`, `axis_up = Z`를 사용한다. 여러 오브젝트로 구성된 에셋은 **Combine Meshes**, 라이트맵 UV 생성과 자동 충돌 설정으로 임포트한다.
+현재 확장 에셋은 다음과 같다.
 
-고양이, 자동차, 교량, 도로 조각, 교차로와 나무도 같은 Blender MCP 절차로 생성하고 수정한다. `Docs/BlenderMCP_Modeling_Guide.md`를 따르며 변경한 `.blend`, `.fbx`, 미리보기, 치수, 축 규칙과 검증 결과를 `Docs/BlenderMCP_Asset_Log.md`에 기록한다.
+| 키트 | 내부 메시 | 검증 치수 |
+|---|---|---|
+| `SM_SolCity_SuburbanHouses_01` | `SM_SolCity_SuburbanHouse_01..04` | 각각 `17.250 x 12.798 x 6.640 m` |
+| `SM_SolCity_Conifers_01` | `SM_SolCity_Conifer_01` | `4.972 x 5.100 x 7.568 m` |
+|  | `SM_SolCity_Conifer_02` | `4.192 x 4.300 x 9.585 m` |
+| `SM_SolCity_VoxelCat_01` | 단일 메시 | `1.250 x 1.896 x 1.198 m` |
+| `SM_SolCity_MegaSkyscrapers_01` | `SM_SolCity_MegaGlassCurtainwall_01` | `48.000 x 42.425 x 225.000 m` |
+|  | `SM_SolCity_MegaNewYorkSetback_01` | `52.000 x 44.700 x 228.500 m` |
+|  | `SM_SolCity_MegaGeometricTwist_01` | `49.889 x 52.336 x 223.500 m` |
+|  | `SM_SolCity_MegaPodiumCrown_01` | `56.000 x 54.500 x 227.500 m` |
 
-완성형 Blender 건물은 원본 비율을 유지한다. 도시 스케일 보정이 필요하면 표준 도로 차로 폭에서 계산한 하나의 균일한 XYZ 스케일만 사용한다. `목표 높이 / 원본 메시 높이`로 Z만 별도 계산하지 않는다.
+모든 메시가 clean FBX 재임포트에서 정상 바운드와 `minZ = 0`을 통과했다.
 
-높이가 변하는 건물은 완성 메시를 늘이지 않고 다음 FBX 모듈을 적층한다.
+주택·침엽수·초대형 타워 키트는 **Combine Meshes = false**, 복셀 고양이는 **Combine Meshes = true**로 임포트한다. 라이트맵 UV와 자동 충돌을 생성한다.
+
+가변 높이 절차형 건물은 다음 authored 모듈을 사용한다.
 
 - `SM_SolCity_BuildingBase_01`
 - `SM_SolCity_BuildingMiddle_01`
 - `SM_SolCity_BuildingCrown_01`
+- `SM_SolCity_CornerBase_01`
+- `SM_SolCity_CornerMiddle_01`
+- `SM_SolCity_CornerCrown_01`
 
-창문, 프레임, 출입구, 돌출부와 옥상 디테일은 모듈에 직접 모델링한다. 벽을 큐브로 다시 만들거나 기존 `M_AnimeFacade` 창문 벽 텍스처를 박스에 적용하지 않는다.
+선택 옥상·랜드마크 모듈에는 HVAC, 물탱크, 태양광, 안테나, 퍼골라, 헬기장, 고도 경고등과 스카이브리지 연결부가 있다. 일반 완성 건물은 XYZ 균일 스케일을 유지한다. 초대형 CBD 랜드마크는 예외로, XY는 필지에 맞추되 수직 스케일을 최소 `0.86`으로 유지해 웅장한 높이를 보존한다.
 
-FBX 머티리얼 슬롯 이름을 안정적으로 유지한다. Blender 머티리얼은 제작 기준이며 실제 게임 렌더링은 슬롯 이름으로 할당된 Unreal 네이티브 머티리얼 인스턴스를 사용한다.
+차량과 고양이 FBX는 Blender `-Y` 전방 규칙을 사용한다. Unreal 메시 컴포넌트에는 상대 yaw `-90도`를 적용하고 액터 내비게이션은 Unreal `+X` 전방을 유지한다. 현재 고양이 에셋은 `SM_SolCity_VoxelCat_01`, 런타임 스케일은 `0.62`다.
 
-포워드 축 규칙은 다음과 같다.
+### 5. Unreal 에셋 재구성
 
-- 도로 스플라인 메시는 길이 방향으로 충분히 분할하고 Unreal `+X`가 전방이 되게 한다.
-- 자동차는 Blender `-Y` 전방 규칙으로 내보낸다. FBX 축 변환 후에는 패키지 화면에서 검증된 시각 메시 상대 yaw `-90도`를 적용하며 이동과 감지 로직은 Unreal 액터 `+X`를 유지한다.
-- 고양이도 같은 Blender 규칙으로 내보낸다. FBX 축 변환 후 시각 메시 상대 yaw `-90도`를 적용해 보도 접선 방향을 바라보게 하고 내비게이션은 액터 로컬 `+X`를 유지한다.
-
-교량 상판, 교각, 난간과 진입부 전환을 Blender에서 신경 써서 모델링한다. 상판은 도로 그래프와 차로 폭에 맞아야 하며 교각은 강 경로를 침범하지 않아야 한다. 진입부에는 도로나 Landscape 틈이 보이면 안 된다.
-
-모든 모델은 렌더 미리보기를 확인하고 깨끗한 Blender 5.2 장면에 FBX를 다시 임포트한다. 메시 수, 정상적인 바운드, 지면 접점, 치수, 전방 방향과 오류 없는 임포트를 확인한다.
-
-### 5. Unreal 에셋과 머티리얼 셋업
-
-원본 텍스처는 `Content/Art/Source`에 있다.
-
-- `T_AnimeGrass.png`
-- `T_AnimeAsphalt.png`
-- `T_AnimeWater.png`
-- `T_AnimeFacade.png`: 원본 및 레거시 용도로만 유지
-
-ImageGen 결과로 앞의 텍스처 3개를 교체할 때는 파일명을 유지한다. **Tools > Execute Python Script**에서 다음 순서로 실행한다.
+체크인된 Unreal 에셋을 사용할 때는 별도 설정이 필요 없다. 원본에서 에셋을 재구성할 때 **Tools > Execute Python Script** 또는 `UnrealEditor-Cmd.exe`로 다음 순서에 따라 실행한다.
 
 1. `Content/Python/SetupSolCityAssets.py`
-2. `Content/Python/TuneSolCityEnvironment.py`
+2. `Content/Python/SetupSolCitySurfaceAssets.py`
 3. `Content/Python/ImportSolCityBuildingModules.py`
-4. `Content/Python/ImportSolCityProps.py`
-5. `Content/Python/CreateSolCitySplineMaterials.py`
-6. `Content/Python/FinalizeSolCityMaterials.py`
-7. `Content/Python/BuildSolCityLandscape.py`
+4. `Content/Python/ImportSolCityExtendedBuildingModules.py`
+5. `Content/Python/ImportSolCityProps.py`
+6. `Content/Python/ImportSolCityUrbanProps.py`
+7. `Content/Python/ImportSolCityExpansionAssets.py`
+8. `Content/Python/SetupSolCityBillboard.py`
+9. `Content/Python/CreateSolCitySplineMaterials.py`
+10. `Content/Python/SetupSolCityBuildingMaterials.py`
+11. `Content/Python/FinalizeSolCityMaterials.py`
+12. `Content/Python/TuneSolCityEnvironment.py`
 
-`SetupSolCityAssets.py`는 완성형 건물 3종을 `import_materials = False`로 임포트하고 `SetupSolCityBuildingMaterials.py`를 호출한다. 머티리얼 스크립트는 다음 에셋을 생성하거나 갱신한다.
+`ImportSolCityExpansionAssets.py`는 주택 4, 침엽수 2, 초대형 타워 4, 복셀 고양이 1개로 총 11개 메시를 임포트한다. 가져온 기본 재질에는 Instanced Static Mesh 사용 플래그도 설정한다.
 
-- `/Game/Art/Buildings/Materials/M_SolCity_Building_Master`
-- 실제 제작 슬롯에 대응하는 네이티브 머티리얼 인스턴스 28개
-- MidRise `10/10`, CornerRetail `9/9`, SteppedTower `9/9`의 결정적 슬롯 할당
+`SetupSolCityBillboard.py`는 광고판, 언어 없는 광고 텍스처 4종, 양면/HISM 호환 마스터 재질과 교체 가능한 인스턴스 4종을 만든다. 메시의 프레임은 슬롯 `0`, 광고면은 슬롯 `1`이다. 현재 스크립트에는 `PROJECT = Path(r"D:\github\SolCity")`가 있으므로 다른 위치에 체크아웃했다면 이 값을 수정한다.
 
-마스터 머티리얼은 Opaque이며 Base Color, Metallic, Roughness, Specular, Emissive, Normal, Roughness Texture와 Macro Variation 설정을 제공한다. 누락, 이름 변경, 중복과 미매핑 슬롯을 로그로 남긴다. 스크립트를 다시 실행해도 FBX 레거시 머티리얼을 만들지 않고 동일 에셋과 할당을 갱신한다.
+원본 텍스처는 `Content/Art/Source/`, 런타임 에셋은 `/Game/Art/Generated`, `/Game/Art/Materials`, `/Game/Art/Buildings`, `/Game/Art/Props`에 있다.
 
-건물 FBX나 슬롯이 바뀌면 `Content/Python/SetupSolCityBuildingMaterials.py`를 별도로 다시 실행한다. `import_or_reimport_buildings()`는 머티리얼 생성을 끈 채 FBX를 제자리 임포트한 뒤 네이티브 슬롯 매핑을 복원한다.
+일부 런타임 에셋은 문자열 경로로 로드하므로 `Config/DefaultGame.ini`가 맵, 재질, 생성 에셋, 프랍과 건물 폴더를 강제 쿠킹한다.
 
-`TuneSolCityEnvironment.py`는 채도를 낮춘 녹색 틴트, 높은 Roughness와 낮은 Specular로 형광 같은 잔디를 완화한다. 잔디 기본 머티리얼을 다시 생성했다면 이 스크립트도 다시 실행한다.
+#### Landscape 주의사항
 
-`Config/DefaultGame.ini`는 `/Game/Maps`, `/Game/Art/Materials`, `/Game/Art/Generated`, `/Game/Art/Props`, `/Game/Art/Buildings`를 강제 쿠킹한다. 런타임 C++이 여러 에셋을 문자열 경로로 로드하므로 쿠커가 참조를 항상 추적할 수 없으며, 이 설정으로 패키지에 `M_AnimeWater`와 `T_AnimeWater`도 반드시 포함한다.
+현재 1.44km 지면, 용도지역, 강, 둔치, 옹벽과 원거리 지면 연결의 권위 구현은 런타임 생성기다. `USolCityLandscapeLibrary`의 기본값은 `144000, 6000, -90`이지만 `Content/Python/BuildSolCityLandscape.py`는 아직 예전 `36000, 2400, -90` 인자를 전달한다. 현재 도시에서 이 스크립트를 그대로 실행하지 않는다. 지속 Landscape를 다시 만들 필요가 있다면 호출을 다음처럼 바꾼다.
 
-### 6. 월드 생성과 런타임 동작
-
-- 비대칭 간선도로, 순환 집산도로와 곡선 지구 분기를 생성한다.
-- 도로는 `USplineComponent`와 `USplineMeshComponent`로 렌더링하고 교차로 메시로 분기 이음매와 스플라인 끝을 덮는다.
-- 필지는 도로 근처에서 결정적으로 샘플링하고 도로·강·건물 겹침을 제외한다. 발자국 크기와 회전을 변화시키고 중심부 밀도를 높인다.
-- 완성형 건물 3종을 균형 있고 결정적으로 섞는다. 특정 건물을 희귀 스타일, 높이 조건이나 낮은 무작위 확률 뒤에 숨기지 않는다.
-- 완성형 건물은 차로 폭 기준의 균일 스케일을 사용하고 높이 가변 건물은 Base/Middle/Crown HISM을 적층한다.
-- 지면 타일 대신 영구 Landscape를 사용한다. 현재 Landscape는 컴포넌트 4 x 4, 컴포넌트당 섹션 2 x 2, 섹션당 63쿼드로 36,000cm 영역에 505 x 505 버텍스를 만든다.
-- 강바닥은 `-230cm`, 수면은 `-90cm`에 두고 강은 하나로 이어진 UV 애니메이션 리본으로 렌더링한다.
-- 자동차는 제한 속도, 앞차 간격, 적신호 정지와 올바른 액터 전방 정렬이 있는 방향성 2차선 그래프를 이용한다.
-- 고양이는 차도 밖의 별도 보도 웨이포인트 그래프를 사용하며 시각 전방과 이동 방향이 일치해야 한다.
-- 충돌하는 두 이동 축에 대해 6단계 신호 주기를 사용한다.
-- 나무는 도로, 강 여유 영역, 교량 진입부와 이미 사용 중인 건물 필지를 피해 배치한다.
-- `W A S D` 화면 이동과 부드럽게 보간되는 마우스 휠 줌을 지원한다. 마우스 오른쪽 버튼을 누른 상태에서 수평 드래그는 카메라 회전, 수직 드래그는 피치 조절(기본 `-80`도~-`25`도)을 수행한다.
-- `F`를 눌러 저장된 시티 뷰를 잃지 않고 자유 비행 모드를 토글한다. 자유 비행에서는 `W A S D`로 카메라 기준 이동, `Q/E`로 하강/상승, RMB 드래그로 시점 회전, 휠로 비행 속도를 조절한다. `F`를 다시 누르면 저장한 시티 카메라 위치, 각도와 줌을 복원한다.
-
-카메라 수치는 `ACityCameraPawn`과 동일하게 유지한다. 초기 스프링암 길이는 `11,000cm`, 시티 줌 범위는 `800`~`48,000cm`, 휠 목표 간격은 `2,500cm`, 줌 보간 속도는 `5.0`이다. 시티 화면 이동 속도는 `5,000cm/s`다. 자유 비행은 `6,000cm/s`로 시작하며 휠 한 단계마다 `1,000cm/s`씩 `500`~`30,000cm/s` 범위에서 조절하고 피치는 `-89`도~`89`도로 제한한다.
-
-휠 입력으로 스프링암 길이를 즉시 바꾸지 말고 목표 줌 값을 변경한다. 자유 비행 진입 시 시티 Pawn Transform, 스프링암 회전, 현재 암 길이와 목표 줌을 저장하고 현재 카메라 월드 Transform 위치에서 암 길이를 0으로 만든다. 다음 `F` 입력에서 모든 값을 복원해 진행 중이던 줌도 튀지 않고 이어지게 한다. `Config/DefaultInput.ini`에는 `F`의 `ToggleFreeFly`와 `E = +1`, `Q = -1`의 `MoveUp` 매핑을 정의한다.
-
-### 7. 환경, 조명과 비주얼 패리티
-
-동일한 제작 액터가 없을 때만 런타임에서 환경 액터를 생성한다. 기존 액터가 있으면 재사용해 레벨 재로딩과 PIE에서 대기, 태양, Sky Light, 포그, 구름과 Post Process Volume이 중복되지 않게 한다.
-
-Directional Light 설정은 다음과 같다.
-
-- 위치 `(0, 0, 8000)`
-- 회전 Roll/X `0도`, Pitch/Y `-166도`, Yaw/Z `-76도`
-- 스케일 `(2.5, 2.5, 2.5)`
-- 강도 `3.4`, 간접광 강도 `1.05`
-- Source Angle `1.0`, Contact Shadow Length `0.035`, Contact Shadow Intensity `0.65`
-- Movable, Atmosphere Sun Light와 구름 그림자 활성화
-
-그늘진 건물 면이 읽히도록 푸른 앰비언트가 있는 이동형 실시간 Sky Light와 검지 않은 Lower Hemisphere를 사용한다. Sky Atmosphere, 볼류메트릭 포그가 활성화된 Exponential Height Fog와 UE 5.7 내장 심플 Volumetric Cloud 머티리얼을 사용한다.
-
-무한 범위 런타임 Post Process Volume은 물리 카메라 노출을 끈 Manual Exposure, 노출 보정 `0.0`, AO 강도 `0.45`, AO 반경 `120`, AO Power `1.2`, Saturation `0.97`, Contrast `1.02`, Bloom 강도 `0.25`, Bloom Threshold `1.4`를 사용한다.
-
-유한한 Landscape 바깥에는 검은 월드가 보일 수 있다. 플레이 영역 바깥과 아래에 크고 낮은 원경 지면 평면을 유지하고 충돌과 그림자를 끈다. Height Fog로 수평선에 섞이게 하며 게임플레이와 내비게이션은 Landscape에서만 처리한다.
-
-제어된 머티리얼 비교는 `Content/Python/BuildSolCityLookDev.py`를 두 모드로 실행한다.
-
-```powershell
-$Editor = "C:\Program Files\Epic Games\UE_5.7\Engine\Binaries\Win64\UnrealEditor-Cmd.exe"
-& $Editor "$PWD\SolCity.uproject" -ExecutePythonScript="$PWD\Content\Python\BuildSolCityLookDev.py" -SolCityLookDevStage=legacy -unattended -nop4 -nosplash -DDC-ForceMemoryCache -NoZenLoader
-& $Editor "$PWD\SolCity.uproject" -ExecutePythonScript="$PWD\Content\Python\BuildSolCityLookDev.py" -SolCityLookDevStage=native -unattended -nop4 -nosplash -DDC-ForceMemoryCache -NoZenLoader
+```python
+unreal.SolCityLandscapeLibrary.rebuild_sol_city_landscape(144000.0, 6000.0, -90.0)
 ```
 
-분리된 `/Game/Maps/SolCityLookDev` 장면은 53mm 풀프레임 카메라, 고정 3점 조명, Reflection Capture, 중립 Unlit 배경과 Manual Exposure를 사용한다. 동일한 1600 x 900 캡처를 다음 위치에 저장한다.
+### 6. 현재 절차 생성 구조
 
-```text
-Saved/VisualParity/SolCity_CornerRetail_lookdev_before.png
-Saved/VisualParity/SolCity_CornerRetail_lookdev_after.png
-```
+`ASolCityGenerator::RegenerateCity()`는 다음 순서로 동작한다.
 
-Legacy 모드는 액터 단위 오버라이드만 사용하며 실제 Static Mesh의 네이티브 할당을 바꾸지 않는다.
+1. 생성 컴포넌트와 결정적 상태 초기화.
+2. HISM과 스플라인 인스턴스 그룹 생성.
+3. 지면, 강, 둔치, 옹벽, 산책로, 난간과 원거리 전환부 생성.
+4. 전체 도로 계층 생성.
+5. 모든 도로가 확정된 뒤 경석과 인도 스트립 생성.
+6. 용도지역 지면 생성.
+7. 광고판을 포함한 교통·도시 프랍의 위치 선점과 배치.
+8. 블록 추출, 필지 분할, 공공 공간 선점과 건물 배치.
+9. authored 교량 배치.
+10. 활엽수와 침엽수 배치.
+11. HISM 트리 완성과 검증 수치 출력.
+
+도로는 360cm 차로 폭을 기준으로 한다.
+
+| 등급 | 표시 차로 수 | 차도 폭 | 한쪽 인도 폭 |
+|---|---:|---:|---:|
+| 골목길 | 1 | `360 cm` | `160 cm` |
+| 집산도로 | 2 | `720 cm` | `240 cm` |
+| 간선도로 / 교량 | 4 | `1,440 cm` | `320 cm` |
+
+차도면은 `Z = 8 cm`, 인도 상면은 `Z = 23 cm`, 경석 폭은 `20 cm`다. 경석과 인도는 도로를 만들 때 즉시 끝까지 생성하지 않는다. 모든 도로 선분을 기록한 뒤 2D 교차점을 찾고, 각 스트립에서 교차로 여유 구간을 빼고 남은 부분만 생성한다. 따라서 교차로를 가로지르는 경석이 생기지 않는다.
+
+용도지역은 먼저 연속 주거 지면 받침을 만들고 그 위에 주거·상업·공원·주차 셀을 배치한다. 셀 크기는 피치보다 16cm 크게 겹치므로 셀 사이로 원거리 지면이 검은 선처럼 노출되지 않는다.
+
+`SolCityLotLayout`은 도로 중심선에서 닫힌 블록을 추출하고 도로를 향한 필지로 나눈다. 도시 경계, 강, 도로, 기존 건물, 광고판, 공원, 주차장과 중정의 충돌을 거부한다. 닫히지 않은 도로 지역은 도시 전체 포인트 산포가 아니라 결정적인 도로 전면 필지 폴백으로 채운다.
+
+절차형 건물 스타일은 다음과 같다.
+
+- 셋백 중층 건물.
+- authored 코너 모듈과 L자 폴백.
+- 위층이 아래층보다 절대 넓어지지 않는 테이퍼 타워.
+- 중정 클러스터.
+- authored 외곽 주택과 저층 연립 폴백.
+- 한두 개의 공중 연결부가 있는 대칭 쌍둥이 타워.
+- 넓은 포디엄과 단조 감소 셋백을 가진 초대형 CBD 타워.
+
+일반 필지가 중심부를 채우기 전에 큰 도심 블록 내부를 authored 초대형 마천루 4종의 랜드마크 필지로 선점한다. 추가 조건을 만족하는 CBD 필지는 절차형 초대형 스타일을 사용할 수 있다. 면적이 큰 지붕에는 헬기장, 물탱크, HVAC, 태양광, 안테나·퍼골라와 고도 경고등을 배치한다.
+
+외곽 주거지는 더 넓고 깊은 필지, 축소된 건축판, 색이 다른 단층 주택 4종과 높은 수목 선호도를 사용한다. 외곽의 적합한 수목 배치 중 최대 약 38%는 침엽수 2종 중 하나를 사용한다.
+
+광고판은 건물보다 먼저 배치해 가려지지 않게 필지를 선점한다. 현재 도시 크기에서 목표는 48개다. 도로 양쪽을 검사하고 반대쪽은 yaw를 180도 보정하며 지면 높이에 맞춘다. 언어 없는 광고 재질 4종을 균등하게 돌려 쓴다.
+
+### 7. 시뮬레이션, 카메라와 환경
+
+차량은 방향성 도로 그래프에서 제한 속도, 가감속, 앞차 간격, 적신호 정지와 두 충돌 축에 대한 6단계 신호 주기를 사용한다. 고양이는 보이는 인도 스트립에서 만든 별도 보행 웨이포인트 그래프만 사용하며 의도적으로 차로를 통과하지 않는다.
+
+카메라 기본값은 다음과 같다.
+
+| 설정 | 값 |
+|---|---:|
+| 초기 스프링암 | `11,000 cm` |
+| 도시 줌 범위 | `800..48,000 cm` |
+| 휠 줌 단계 | `2,500 cm` |
+| 줌 보간 속도 | `5.0` |
+| 화면 이동 속도 | `5,000 cm/s` |
+| 도시 시점 피치 | `-80..-25도` |
+| 자유 비행 속도 | `6,000 cm/s` |
+| 자유 비행 속도 범위 | `500..30,000 cm/s` |
+| 자유 비행 피치 | `-89..89도` |
+
+`W A S D`로 화면 이동, RMB 드래그로 회전과 피치 변경, 휠로 줌, `F`로 자유 비행을 전환한다. 자유 비행에서는 `Q/E`로 하강·상승하고 휠로 속도를 바꾼다. 자유 비행을 끝내면 저장한 도시 Transform, 스프링암 회전, 현재 길이와 목표 줌을 복원한다.
+
+런타임은 Sky Atmosphere, 방향광, Sky Light, Exponential Height Fog, Volumetric Cloud와 무한 Post Process Volume을 생성하거나 기존 액터를 재사용한다. 수동 노출, AO `0.45`, AO 반경 `120`, AO Power `1.2`, 채도 `0.97`, 대비 `1.02`, Bloom `0.25`, Bloom Threshold `1.4`를 사용한다. `Z = -280 cm`의 매우 큰 충돌·그림자 없는 평면과 높이 안개로 유한 지형 밖 경계를 가린다.
 
 ### 8. 빌드와 검증
 
-기본 검증은 일반 에디터 빌드만 수행한다. 쿠킹과 패키징은 프로젝트 소유자가 별도로 실행하는 단계이며 소스 검증만 필요할 때 아래 명령을 `BuildCookRun`으로 바꾸지 않는다.
+Editor 타깃을 빌드한다.
 
 ```powershell
-& "C:\Program Files\Epic Games\UE_5.7\Engine\Build\BatchFiles\Build.bat" SolCityEditor Win64 Development -Project="$PWD\SolCity.uproject" -WaitMutex -NoHotReloadFromIDE
+& "C:\Program Files\Epic Games\UE_5.7\Engine\Build\BatchFiles\Build.bat" `
+  SolCityEditor Win64 Development "$PWD\SolCity.uproject" `
+  -WaitMutex -NoHotReloadFromIDE
 ```
 
-`SolCity.uproject`를 열고 `/Game/Maps/SolCity`를 로드해 Play-in-Editor를 실행한다. 다음 내용을 검증한다.
+BeginPlay 자동 생성 스모크 테스트를 실행한다.
 
-- 마우스 휠이 갑작스러운 거리 변화 없이 전체 범위에서 부드럽게 줌을 수행하고 `W A S D` 이동이 정상인지 확인한다.
-- 마우스 오른쪽 버튼을 누른 채 수평으로 드래그하면 카메라가 회전하고, 수직으로 드래그하면 지면을 바라보는 각도가 설정된 피치 제한 안에서 조절되며 줌은 바뀌지 않는지 확인한다.
-- `F`를 누르면 현재 카메라 화면을 유지한 채 자유 비행으로 진입하고 `W A S D`, `Q/E`, RMB 시점 회전과 휠 속도 조절이 동작하며, `F`를 다시 누르면 저장된 시티 뷰가 정확히 복원되는지 확인한다.
-- Landscape 가장자리, 원경 지면, 포그와 구름을 통해 검은 외곽이 보이지 않는지 확인한다.
-- 잔디가 형광색이 아니며 그늘진 건물 면에 앰비언트 스카이 컬러가 남는지 확인한다.
-- 강과 스플라인 도로가 연속적이며 교차로와 교량 진입부에 이음매가 없는지 확인한다.
-- 교각과 상판이 강과 도로 차로에 맞게 정렬되는지 확인한다.
-- 완성형 건물이 원본 비율을 유지하고 3종 모두 균형 있게 섞이는지 확인한다.
-- 모듈 건물이 늘어난 박스가 아니라 올바른 크기의 Base/Middle/Crown 층으로 구성되는지 확인한다.
-- 셋업 반복 실행이나 FBX 재임포트 후에도 네이티브 머티리얼 슬롯이 유지되는지 확인한다.
-- 자동차가 이동 방향을 바라보고 차로를 유지하며 적신호에 정지하는지 확인한다.
-- 고양이가 보도를 벗어나지 않고 이동 방향을 바라보는지 확인한다.
-- LookDev legacy/native 캡처의 구도와 노출이 동일한지 확인한다.
+```powershell
+& "C:\Program Files\Epic Games\UE_5.7\Engine\Binaries\Win64\UnrealEditor-Cmd.exe" `
+  "$PWD\SolCity.uproject" -game -nullrhi -nosound -unattended `
+  -stdout -FullStdOutLogOutput "-ExecCmds=quit"
+```
 
-반복 실행 안전성을 검증할 때 건물 머티리얼 셋업을 두 번 실행한다. 두 실행 모두 할당 슬롯 `28/28`, 오류 0을 출력해야 한다.
+`Saved/Logs/SolCity.log`에서 다음 로그를 확인한다.
+
+- `SolCity parcel layout`
+- `SolCity expansion authored buildings`
+- `SolCity urban props`
+- `SolCity authored modules`
+- `SolCity streetscape`
+
+`missing bUsedWithInstancedStaticMeshes`, `Default Material will be used`, Python traceback, assertion 또는 fatal error가 없어야 한다.
+
+PIE 시각 검증 항목:
+
+- 녹지 셀 사이에 검은 격자선이 없다.
+- 경석과 인도가 교차로 차도 전에 끝난다.
+- 골목길·집산도로·간선도로의 폭과 차선 표시가 구분된다.
+- CBD에 authored 초대형 타워 4종의 서로 다른 실루엣이 있다.
+- 쌍둥이 타워의 공중 연결부가 명확히 보인다.
+- 외곽에 넓은 지붕 단층 주택이 여러 색으로 배치된다.
+- 광고판이 도로를 향하고 언어 없는 광고 4종을 순환한다.
+- 활엽수 사이에 침엽수가 섞인다.
+- 복셀 고양이의 눈, 귀, 주둥이, 수염, 발과 마디형 꼬리가 보이며 인도 방향을 따라간다.
+- 강물, 녹지 둔치, 옹벽, 산책로, 난간, 교량과 콘크리트 전환부 사이에 열린 틈이 없다.
+
+Blender 에셋을 다시 만들었다면 `_preview.png`를 검사하고 clean Blender 5.2 FBX 재임포트 검증도 반복한 뒤 결과를 승인한다.

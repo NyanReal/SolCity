@@ -13,7 +13,7 @@ class SOLCITY_API USolCityLandscapeLibrary : public UBlueprintFunctionLibrary
 public:
 	UFUNCTION(BlueprintCallable, Category = "Sol City|Landscape")
 	static bool RebuildSolCityLandscape(
-		float CityDiameter = 36000.0f,
-		float RiverWidth = 2400.0f,
+		float CityDiameter = 144000.0f,
+		float RiverWidth = 6000.0f,
 		float RiverSurfaceZ = -90.0f);
 };

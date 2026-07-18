@@ -46,15 +46,15 @@ ASolCityCatCitizen::ASolCityCatCitizen()
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> SphereAsset(TEXT("/Engine/BasicShapes/Sphere.Sphere"));
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> ConeAsset(TEXT("/Engine/BasicShapes/Cone.Cone"));
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> CylinderAsset(TEXT("/Engine/BasicShapes/Cylinder.Cylinder"));
-	static ConstructorHelpers::FObjectFinder<UStaticMesh> AuthoredCatAsset(TEXT("/Game/Art/Props/SM_SolCity_Cat_01.SM_SolCity_Cat_01"));
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> AuthoredCatAsset(TEXT("/Game/Art/Props/SM_SolCity_VoxelCat_01.SM_SolCity_VoxelCat_01"));
 	if (AuthoredCatAsset.Succeeded())
 	{
 		CatMesh->SetStaticMesh(AuthoredCatAsset.Object);
-		CatMesh->SetRelativeLocation(FVector(0.0f, 0.0f, -1.5f));
+		CatMesh->SetRelativeLocation(FVector::ZeroVector);
 		// After FBX axis conversion the imported visual needs a -90 yaw. Keep the
 		// pedestrian actor's local +X path heading and rotate only its hierarchy.
 		CatMesh->SetRelativeRotation(FRotator(0.0f, -90.0f, 0.0f));
-		CatMesh->SetRelativeScale3D(FVector(0.85f));
+		CatMesh->SetRelativeScale3D(FVector(0.62f));
 		for (UStaticMeshComponent* FallbackPart : {HeadMesh.Get(), LeftEarMesh.Get(), RightEarMesh.Get(), TailMesh.Get()})
 		{
 			FallbackPart->SetVisibility(false);

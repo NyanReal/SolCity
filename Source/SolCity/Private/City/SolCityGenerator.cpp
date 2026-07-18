@@ -22,7 +22,7 @@ namespace SolCityGeneration
 	constexpr float RiverBuildingSetback = StandardLaneWidth * 0.75f;
 	constexpr float ProceduralRoadSetback = StandardLaneWidth * 0.65f;
 	constexpr float MinimumBuildingFootprint = StandardLaneWidth * 2.0f;
-	constexpr float MaximumBuildingFootprint = StandardLaneWidth * 5.20f;
+	constexpr float MaximumBuildingFootprint = StandardLaneWidth * 16.0f;
 	constexpr float MaximumAuthoredBuildingHeight = StandardLaneWidth * 7.5f;
 	constexpr int32 AuthoredBuildingInterval = 4;
 	constexpr float RoadSurfaceZ = 8.0f;
@@ -106,6 +106,29 @@ ASolCityGenerator::ASolCityGenerator()
 	AuthoredMidRiseMesh = AuthoredMidRiseAsset.Object;
 	AuthoredCornerRetailMesh = AuthoredCornerRetailAsset.Object;
 	AuthoredSteppedTowerMesh = AuthoredSteppedTowerAsset.Object;
+	for (int32 Index = 1; Index <= 4; ++Index)
+	{
+		const FString AssetName = FString::Printf(TEXT("SM_SolCity_SuburbanHouse_%02d"), Index);
+		const FString AssetPath = FString::Printf(TEXT("/Game/Art/Buildings/%s.%s"), *AssetName, *AssetName);
+		if (UStaticMesh* Mesh = LoadObject<UStaticMesh>(nullptr, *AssetPath))
+		{
+			SuburbanHouseMeshes.Add(Mesh);
+		}
+	}
+	const TCHAR* MegaSkyscraperAssetNames[] = {
+		TEXT("SM_SolCity_MegaGlassCurtainwall_01"),
+		TEXT("SM_SolCity_MegaNewYorkSetback_01"),
+		TEXT("SM_SolCity_MegaGeometricTwist_01"),
+		TEXT("SM_SolCity_MegaPodiumCrown_01")
+	};
+	for (const TCHAR* AssetName : MegaSkyscraperAssetNames)
+	{
+		const FString AssetPath = FString::Printf(TEXT("/Game/Art/Buildings/%s.%s"), AssetName, AssetName);
+		if (UStaticMesh* Mesh = LoadObject<UStaticMesh>(nullptr, *AssetPath))
+		{
+			MegaSkyscraperMeshes.Add(Mesh);
+		}
+	}
 	BuildingBaseModuleMesh = BuildingBaseModuleAsset.Object;
 	BuildingMiddleModuleMesh = BuildingMiddleModuleAsset.Object;
 	BuildingCrownModuleMesh = BuildingCrownModuleAsset.Object;
@@ -124,6 +147,15 @@ ASolCityGenerator::ASolCityGenerator()
 	AuthoredRoadJunctionMesh = AuthoredRoadJunctionAsset.Object;
 	AuthoredBridgeMesh = AuthoredBridgeAsset.Object;
 	AuthoredTreeMesh = AuthoredTreeAsset.Object;
+	for (int32 Index = 1; Index <= 2; ++Index)
+	{
+		const FString AssetName = FString::Printf(TEXT("SM_SolCity_Conifer_%02d"), Index);
+		const FString AssetPath = FString::Printf(TEXT("/Game/Art/Props/%s.%s"), *AssetName, *AssetName);
+		if (UStaticMesh* Mesh = LoadObject<UStaticMesh>(nullptr, *AssetPath))
+		{
+			ConiferMeshes.Add(Mesh);
+		}
+	}
 	BenchMesh = LoadObject<UStaticMesh>(nullptr, TEXT("/Game/Art/Props/SM_SolCity_Bench_01.SM_SolCity_Bench_01"));
 	TrashBinMesh = LoadObject<UStaticMesh>(nullptr, TEXT("/Game/Art/Props/SM_SolCity_TrashBin_01.SM_SolCity_TrashBin_01"));
 	StreetLampMesh = LoadObject<UStaticMesh>(nullptr, TEXT("/Game/Art/Props/SM_SolCity_StreetLamp_01.SM_SolCity_StreetLamp_01"));
@@ -188,16 +220,28 @@ void ASolCityGenerator::RegenerateCity()
 	CreateInstanceGroups();
 	GenerateGroundAndRiver();
 	GenerateRoadHierarchy();
+	GenerateRoadEdgeStrips();
 	GenerateDistrictSurfaces();
+	GenerateTrafficFurniture();
 	GenerateBuildings();
 	GenerateBridge();
-	GenerateTrafficFurniture();
 	GenerateTrees();
 	FinalizeInstanceGroups();
 	UE_LOG(LogTemp, Display, TEXT("SolCity authored buildings: MidRise=%d CornerRetail=%d SteppedTower=%d"),
 		AuthoredBuildingInstances ? AuthoredBuildingInstances->GetInstanceCount() : 0,
 		AuthoredCornerRetailInstances ? AuthoredCornerRetailInstances->GetInstanceCount() : 0,
 		AuthoredSteppedTowerInstances ? AuthoredSteppedTowerInstances->GetInstanceCount() : 0);
+	int32 SuburbanAuthoredCount = 0;
+	for (const UHierarchicalInstancedStaticMeshComponent* Group : SuburbanHouseInstances)
+	{
+		SuburbanAuthoredCount += Group ? Group->GetInstanceCount() : 0;
+	}
+	int32 MegaAuthoredCount = 0;
+	for (const UHierarchicalInstancedStaticMeshComponent* Group : MegaSkyscraperInstances)
+	{
+		MegaAuthoredCount += Group ? Group->GetInstanceCount() : 0;
+	}
+	UE_LOG(LogTemp, Display, TEXT("SolCity expansion authored buildings: suburban=%d megaCBD=%d"), SuburbanAuthoredCount, MegaAuthoredCount);
 	UE_LOG(LogTemp, Display, TEXT("SolCity authored uniform scales (360 cm lane basis): MidRise=%.3f CornerRetail=%.3f SteppedTower=%.3f"),
 		GetAuthoredBuildingUniformScale(AuthoredMidRiseMesh),
 		GetAuthoredBuildingUniformScale(AuthoredCornerRetailMesh),
@@ -229,8 +273,13 @@ void ASolCityGenerator::RegenerateCity()
 		(RooftopHelipadInstances ? RooftopHelipadInstances->GetInstanceCount() : 0) +
 		(RooftopWarningBeaconInstances ? RooftopWarningBeaconInstances->GetInstanceCount() : 0),
 		SkybridgeConnectorInstances ? SkybridgeConnectorInstances->GetInstanceCount() : 0);
-	UE_LOG(LogTemp, Display, TEXT("SolCity streetscape: trees=%d curbs=%d riverWalls=%d riverWalks=%d riverRails=%d riverGreenBanks=%d"),
-		TreeInstances ? TreeInstances->GetInstanceCount() : 0,
+	int32 ConiferCount = 0;
+	for (const UHierarchicalInstancedStaticMeshComponent* Group : ConiferInstances)
+	{
+		ConiferCount += Group ? Group->GetInstanceCount() : 0;
+	}
+	UE_LOG(LogTemp, Display, TEXT("SolCity streetscape: trees=%d conifers=%d curbs=%d riverWalls=%d riverWalks=%d riverRails=%d riverGreenBanks=%d"),
+		TreeInstances ? TreeInstances->GetInstanceCount() : 0, ConiferCount,
 		CurbInstances ? CurbInstances->GetInstanceCount() : 0,
 		RiverRetainingWallInstances ? RiverRetainingWallInstances->GetInstanceCount() : 0,
 		RiverPromenadeInstances ? RiverPromenadeInstances->GetInstanceCount() : 0,
@@ -292,10 +341,13 @@ void ASolCityGenerator::ClearGeneratedComponents()
 	AuthoredBuildingInstances = nullptr;
 	AuthoredCornerRetailInstances = nullptr;
 	AuthoredSteppedTowerInstances = nullptr;
+	SuburbanHouseInstances.Reset();
+	MegaSkyscraperInstances.Reset();
 	BridgeInstances = nullptr;
 	AuthoredBridgeInstances = nullptr;
 	JunctionInstances = nullptr;
 	TreeInstances = nullptr;
+	ConiferInstances.Reset();
 	BenchInstances = nullptr;
 	TrashBinInstances = nullptr;
 	StreetLampInstances = nullptr;
@@ -378,6 +430,18 @@ void ASolCityGenerator::CreateInstanceGroups()
 	{
 		AuthoredSteppedTowerInstances = CreateInstanceGroup(TEXT("GeneratedAuthoredSteppedTower"), AuthoredSteppedTowerMesh, nullptr, FLinearColor::White, true, false);
 	}
+	for (int32 Index = 0; Index < SuburbanHouseMeshes.Num(); ++Index)
+	{
+		SuburbanHouseInstances.Add(CreateInstanceGroup(
+			*FString::Printf(TEXT("GeneratedSuburbanHouses%02d"), Index + 1),
+			SuburbanHouseMeshes[Index], nullptr, FLinearColor::White, true, false));
+	}
+	for (int32 Index = 0; Index < MegaSkyscraperMeshes.Num(); ++Index)
+	{
+		MegaSkyscraperInstances.Add(CreateInstanceGroup(
+			*FString::Printf(TEXT("GeneratedMegaSkyscrapers%02d"), Index + 1),
+			MegaSkyscraperMeshes[Index], nullptr, FLinearColor::White, true, false));
+	}
 	BridgeInstances = CreateInstanceGroup(TEXT("GeneratedBridge"), CubeMesh, BridgeMaterial, FLinearColor(0.80f, 0.78f, 0.69f), true);
 	if (AuthoredBridgeMesh)
 	{
@@ -390,6 +454,12 @@ void ASolCityGenerator::CreateInstanceGroups()
 	if (AuthoredTreeMesh)
 	{
 		TreeInstances = CreateInstanceGroup(TEXT("GeneratedTrees"), AuthoredTreeMesh, nullptr, FLinearColor::White, false, false);
+	}
+	for (int32 Index = 0; Index < ConiferMeshes.Num(); ++Index)
+	{
+		ConiferInstances.Add(CreateInstanceGroup(
+			*FString::Printf(TEXT("GeneratedConifers%02d"), Index + 1),
+			ConiferMeshes[Index], nullptr, FLinearColor::White, false, false));
 	}
 	if (BenchMesh)
 	{
@@ -566,7 +636,8 @@ void ASolCityGenerator::GenerateGroundAndRiver()
 	constexpr float WallWidth = 70.0f;
 	constexpr float PromenadeWidth = 360.0f;
 	constexpr float PromenadeTopZ = 12.0f;
-	constexpr float GreenBankWidth = 1500.0f;
+	const float GreenBankWidth = FMath::Max(1500.0f,
+		RiverWidth * 0.5f + 1800.0f - (WaterHalfWidth + WallWidth + PromenadeWidth) + 20.0f);
 	const float WallCenterOffset = WaterHalfWidth + WallWidth * 0.5f;
 	const float PromenadeCenterOffset = WaterHalfWidth + WallWidth + PromenadeWidth * 0.5f;
 	const float GreenBankCenterOffset = WaterHalfWidth + WallWidth + PromenadeWidth + GreenBankWidth * 0.5f;
@@ -659,7 +730,7 @@ void ASolCityGenerator::AddRoadSegment(const FVector& Start, const FVector& End,
 	Segment.LaneCount = SolCityGeneration::LaneCountForRoadClass(RoadClass);
 	Segment.bBridge = bBridge;
 
-	if (bAddSidewalks)
+	if (bAddSidewalks && bBridge)
 	{
 		const FVector Direction = SolCityGeneration::SafeNormal2D(Delta);
 		const FVector Perpendicular(-Direction.Y, Direction.X, 0.0f);
@@ -681,6 +752,118 @@ void ASolCityGenerator::AddRoadSegment(const FVector& Start, const FVector& End,
 			}
 			PedestrianWaypoints.Add(Start + Perpendicular * Side * Offset + FVector(0.0f, 0.0f, SolCityGeneration::SidewalkSurfaceZ));
 			PedestrianWaypoints.Add(End + Perpendicular * Side * Offset + FVector(0.0f, 0.0f, SolCityGeneration::SidewalkSurfaceZ));
+		}
+	}
+}
+
+void ASolCityGenerator::GenerateRoadEdgeStrips()
+{
+	struct FCutInterval
+	{
+		float Start = 0.0f;
+		float End = 0.0f;
+	};
+	auto Cross2D = [](const FVector2D& A, const FVector2D& B)
+	{
+		return A.X * B.Y - A.Y * B.X;
+	};
+
+	for (int32 SegmentIndex = 0; SegmentIndex < RoadSegments.Num(); ++SegmentIndex)
+	{
+		const FSolCityRoadSegment& Segment = RoadSegments[SegmentIndex];
+		if (Segment.bBridge)
+		{
+			continue;
+		}
+		const FVector2D P(Segment.Start.X, Segment.Start.Y);
+		const FVector2D R(Segment.End.X - Segment.Start.X, Segment.End.Y - Segment.Start.Y);
+		const float Length = R.Size();
+		if (Length < 10.0f)
+		{
+			continue;
+		}
+
+		TArray<FCutInterval> Cuts;
+		for (int32 OtherIndex = 0; OtherIndex < RoadSegments.Num(); ++OtherIndex)
+		{
+			if (OtherIndex == SegmentIndex || RoadSegments[OtherIndex].bBridge)
+			{
+				continue;
+			}
+			const FSolCityRoadSegment& Other = RoadSegments[OtherIndex];
+			const FVector2D Q(Other.Start.X, Other.Start.Y);
+			const FVector2D S(Other.End.X - Other.Start.X, Other.End.Y - Other.Start.Y);
+			const float Denominator = Cross2D(R, S);
+			if (FMath::Abs(Denominator) < 0.001f)
+			{
+				continue;
+			}
+			const FVector2D QMinusP = Q - P;
+			const float T = Cross2D(QMinusP, S) / Denominator;
+			const float U = Cross2D(QMinusP, R) / Denominator;
+			if (T < -0.001f || T > 1.001f || U < -0.001f || U > 1.001f)
+			{
+				continue;
+			}
+			const float CenterDistance = FMath::Clamp(T, 0.0f, 1.0f) * Length;
+			const float Clearance = Other.HalfWidth +
+				SolCityGeneration::SidewalkWidthForRoadClass(Other.RoadClass) +
+				SolCityGeneration::CurbWidth + 80.0f;
+			Cuts.Add({
+				FMath::Clamp(CenterDistance - Clearance, 0.0f, Length),
+				FMath::Clamp(CenterDistance + Clearance, 0.0f, Length)});
+		}
+		Cuts.Sort([](const FCutInterval& A, const FCutInterval& B)
+		{
+			return A.Start < B.Start;
+		});
+
+		TArray<FCutInterval> VisibleIntervals;
+		float Cursor = 0.0f;
+		for (const FCutInterval& Cut : Cuts)
+		{
+			if (Cut.Start > Cursor + 80.0f)
+			{
+				VisibleIntervals.Add({Cursor, Cut.Start});
+			}
+			Cursor = FMath::Max(Cursor, Cut.End);
+		}
+		if (Length > Cursor + 80.0f)
+		{
+			VisibleIntervals.Add({Cursor, Length});
+		}
+		const FVector2D Along = R / Length;
+		const FVector2D Normal(-Along.Y, Along.X);
+		const float Yaw = FMath::RadiansToDegrees(FMath::Atan2(R.Y, R.X));
+		const float SidewalkWidth = SolCityGeneration::SidewalkWidthForRoadClass(Segment.RoadClass);
+		const float CurbOffset = Segment.HalfWidth + SolCityGeneration::CurbWidth * 0.5f;
+		const float WalkOffset = Segment.HalfWidth + SolCityGeneration::CurbWidth + SidewalkWidth * 0.5f;
+		for (const FCutInterval& Interval : VisibleIntervals)
+		{
+			const float StripLength = Interval.End - Interval.Start;
+			if (StripLength <= 80.0f)
+			{
+				continue;
+			}
+			const float MidDistance = (Interval.Start + Interval.End) * 0.5f;
+			const FVector2D Midpoint = P + Along * MidDistance;
+			const FVector2D StripStart = P + Along * Interval.Start;
+			const FVector2D StripEnd = P + Along * Interval.End;
+			for (const float Side : {-1.0f, 1.0f})
+			{
+				const FVector2D CurbPlan = Midpoint + Normal * Side * CurbOffset;
+				const FVector2D WalkPlan = Midpoint + Normal * Side * WalkOffset;
+				AddBox(CurbInstances,
+					FVector(CurbPlan.X, CurbPlan.Y, SolCityGeneration::SidewalkSurfaceZ * 0.5f),
+					FVector(StripLength, SolCityGeneration::CurbWidth, SolCityGeneration::SidewalkSurfaceZ), Yaw);
+				AddBox(SidewalkInstances,
+					FVector(WalkPlan.X, WalkPlan.Y, SolCityGeneration::SidewalkSurfaceZ * 0.5f),
+					FVector(StripLength, SidewalkWidth, SolCityGeneration::SidewalkSurfaceZ), Yaw);
+				PedestrianWaypoints.Add(FVector(StripStart.X + Normal.X * Side * WalkOffset,
+					StripStart.Y + Normal.Y * Side * WalkOffset, SolCityGeneration::SidewalkSurfaceZ));
+				PedestrianWaypoints.Add(FVector(StripEnd.X + Normal.X * Side * WalkOffset,
+					StripEnd.Y + Normal.Y * Side * WalkOffset, SolCityGeneration::SidewalkSurfaceZ));
+			}
 		}
 	}
 }
@@ -912,10 +1095,24 @@ void ASolCityGenerator::GenerateRoadHierarchy()
 		FVector2D(-500.0f, 3200.0f), FVector2D(5900.0f, 800.0f)
 	};
 	TArray<FVector2D> DistrictSeeds;
-	DistrictSeeds.Reserve(CanonicalDistrictSeeds.Num());
+	DistrictSeeds.Reserve(CanonicalDistrictSeeds.Num() + 18);
 	for (const FVector2D& Point : CanonicalDistrictSeeds)
 	{
 		DistrictSeeds.Add(Point * LayoutScale);
+	}
+	// The expanded 1.44 km city needs additional independent centers so the
+	// road graph grows in area as well as segment length. Six seeds densify the
+	// CBD and twelve seeds establish outer urban/suburban districts.
+	for (int32 Index = 0; Index < 6; ++Index)
+	{
+		const float Angle = FMath::DegreesToRadians(Index * 60.0f + 18.0f);
+		DistrictSeeds.Add(FVector2D(FMath::Cos(Angle), FMath::Sin(Angle)) * H * 0.18f);
+	}
+	for (int32 Index = 0; Index < 12; ++Index)
+	{
+		const float Angle = FMath::DegreesToRadians(Index * 30.0f + 9.0f);
+		const float Radius = H * (0.62f + (Index % 3) * 0.055f);
+		DistrictSeeds.Add(FVector2D(FMath::Cos(Angle), FMath::Sin(Angle)) * Radius);
 	}
 
 	for (int32 DistrictIndex = 0; DistrictIndex < DistrictSeeds.Num(); ++DistrictIndex)
@@ -955,14 +1152,24 @@ void ASolCityGenerator::GenerateDistrictSurfaces()
 	// Broad, deterministic land-use cells sit below roads and sidewalks. They
 	// communicate zoning at city-camera height while remaining non-colliding so
 	// later lot/building placement can proceed independently above them.
-	constexpr int32 ColumnCount = 6;
-	constexpr int32 RowsPerBank = 3;
 	const float HalfCity = CityDiameter * 0.5f;
-	const float RiverClearance = RiverWidth * 0.5f + CityDiameter * 0.045f;
+	const float RiverClearance = RiverWidth * 0.5f + 1800.0f;
+	const int32 ColumnCount = FMath::Clamp(FMath::RoundToInt(CityDiameter / 8000.0f), 6, 24);
 	const float ColumnPitch = CityDiameter / ColumnCount;
 	const float BankDepth = FMath::Max(1200.0f, HalfCity - RiverClearance);
+	const int32 RowsPerBank = FMath::Clamp(FMath::RoundToInt(BankDepth / 7000.0f), 3, 12);
 	const float RowPitch = BankDepth / RowsPerBank;
-	const FVector CellSize(ColumnPitch - 180.0f, RowPitch - 180.0f, SolCityGeneration::GroundZoneSurfaceZ);
+	const FVector CellSize(ColumnPitch + 16.0f, RowPitch + 16.0f, SolCityGeneration::GroundZoneSurfaceZ);
+
+	// Continuous low underlay prevents the distant plane from appearing through
+	// numerical seams or material-cell boundaries. Zoning cells overlap it by
+	// one centimeter and overlap each other by 16 cm.
+	for (const float BankSign : {-1.0f, 1.0f})
+	{
+		const float UnderlayY = BankSign * (RiverClearance + BankDepth * 0.5f);
+		AddBox(ResidentialGroundInstances, FVector(0.0f, UnderlayY, 0.5f),
+			FVector(CityDiameter + 20.0f, BankDepth + 20.0f, 1.0f));
+	}
 
 	for (int32 BankIndex = 0; BankIndex < 2; ++BankIndex)
 	{
@@ -993,7 +1200,7 @@ void ASolCityGenerator::GenerateDistrictSurfaces()
 					ZoneGroup = CommercialGroundInstances;
 				}
 
-				AddBox(ZoneGroup, FVector(X, Y, SolCityGeneration::GroundZoneSurfaceZ * 0.5f), CellSize);
+				AddBox(ZoneGroup, FVector(X, Y, 1.0f + SolCityGeneration::GroundZoneSurfaceZ * 0.5f), CellSize);
 			}
 		}
 	}
@@ -1083,7 +1290,7 @@ bool ASolCityGenerator::IsBuildingClearOfRoads(const FVector2D& Center, const FV
 void ASolCityGenerator::GenerateBuildings()
 {
 	const float HalfCity = CityDiameter * 0.5f;
-	const int32 EffectiveTargetCount = FMath::Clamp(TargetBuildingCount, 12, 480);
+	const int32 EffectiveTargetCount = FMath::Clamp(TargetBuildingCount, 12, 2400);
 	int32 Accepted = 0;
 
 	TArray<SolCityLotLayout::FRoadCenterline> LotRoads;
@@ -1197,10 +1404,10 @@ void ASolCityGenerator::GenerateBuildings()
 		if (Block.Centroid.Size() < CbdRadius)
 		{
 			// CBD frontages range from narrow infill lots to merged tower podiums.
-			BlockLotSettings.MinimumFrontage = SolCityGeneration::StandardLaneWidth * 1.9f;
-			BlockLotSettings.MaximumFrontage = SolCityGeneration::StandardLaneWidth * 5.2f;
-			BlockLotSettings.MinimumDepth = SolCityGeneration::StandardLaneWidth * 2.4f;
-			BlockLotSettings.MaximumDepth = SolCityGeneration::StandardLaneWidth * 5.0f;
+			BlockLotSettings.MinimumFrontage = SolCityGeneration::StandardLaneWidth * 4.0f;
+			BlockLotSettings.MaximumFrontage = SolCityGeneration::StandardLaneWidth * 15.5f;
+			BlockLotSettings.MinimumDepth = SolCityGeneration::StandardLaneWidth * 4.5f;
+			BlockLotSettings.MaximumDepth = SolCityGeneration::StandardLaneWidth * 15.5f;
 			BlockLotSettings.SideSetback = SolCityGeneration::BuildingGap;
 		}
 		else if (Block.Centroid.Size() > HalfCity * 0.60f)
@@ -1285,8 +1492,9 @@ void ASolCityGenerator::GenerateBuildings()
 
 	int32 TaperedBuildingCount = 0;
 	int32 TwinTowerBuildingCount = 0;
+	int32 MegaCbdBuildingCount = 0;
 	int32 OuterLowRiseCount = 0;
-	auto TryPlaceBuilding = [this, HalfCity, &TaperedBuildingCount, &TwinTowerBuildingCount, &OuterLowRiseCount](
+	auto TryPlaceBuilding = [this, HalfCity, &TaperedBuildingCount, &TwinTowerBuildingCount, &MegaCbdBuildingCount, &OuterLowRiseCount](
 		const FVector2D& Candidate,
 		const FVector2D& RequestedFootprint,
 		float Yaw,
@@ -1303,24 +1511,42 @@ void ASolCityGenerator::GenerateBuildings()
 			FMath::Clamp(RequestedFootprint.X, SolCityGeneration::MinimumBuildingFootprint * 0.78f, SolCityGeneration::MaximumBuildingFootprint),
 			FMath::Clamp(RequestedFootprint.Y, SolCityGeneration::MinimumBuildingFootprint * 0.78f, SolCityGeneration::MaximumBuildingFootprint));
 		const bool bLargeBuilding = Footprint.X * Footprint.Y >= 850000.0f && Height >= 1800.0f;
-		if (TwinTowerBuildingCount == 0 && Style != 1 && bLargeBuilding)
+		const float CoreBias = 1.0f - FMath::Clamp(Candidate.Size() / HalfCity, 0.0f, 1.0f);
+		if (TwinTowerBuildingCount < 2 && CoreBias >= 0.52f && Style != 1 && Style != 4 && Style != 6 && bLargeBuilding)
 		{
-			// Claim the first viable large non-corner parcel for the landmark. This
-			// also covers frontage lots when the planar block graph is incomplete.
+			// Keep the connected twins inside the skyline where their bridges are
+			// visible, and guarantee two landmarks rather than a remote first lot.
 			Style = 5;
 		}
-		else if (Style == 5 && !bLargeBuilding)
+		else if (Style == 5 && (!bLargeBuilding || TwinTowerBuildingCount >= 4))
 		{
-			Style = 0;
+			Style = TwinTowerBuildingCount >= 4 ? 2 : 0;
 		}
-		else if (Style != 1 && Style != 5 && bLargeBuilding)
+		else if (Style != 1 && Style != 5 && Style != 6 && bLargeBuilding)
 		{
 			Style = 2;
 		}
 
 		UHierarchicalInstancedStaticMeshComponent* AuthoredGroup = nullptr;
 		UStaticMesh* AuthoredMesh = nullptr;
-		if (Style != 4 && AcceptedIndex % SolCityGeneration::AuthoredBuildingInterval == 0)
+		bool bSpecialAuthoredBuilding = false;
+		const int32 SuburbanVariantCount = FMath::Min(SuburbanHouseMeshes.Num(), SuburbanHouseInstances.Num());
+		const int32 MegaVariantCount = FMath::Min(MegaSkyscraperMeshes.Num(), MegaSkyscraperInstances.Num());
+		if (Style == 4 && SuburbanVariantCount > 0)
+		{
+			const int32 VariantIndex = (AcceptedIndex + Seed) % SuburbanVariantCount;
+			AuthoredGroup = SuburbanHouseInstances[VariantIndex];
+			AuthoredMesh = SuburbanHouseMeshes[VariantIndex];
+			bSpecialAuthoredBuilding = AuthoredGroup && AuthoredMesh;
+		}
+		else if (Style == 6 && MegaVariantCount > 0)
+		{
+			const int32 VariantIndex = MegaCbdBuildingCount % MegaVariantCount;
+			AuthoredGroup = MegaSkyscraperInstances[VariantIndex];
+			AuthoredMesh = MegaSkyscraperMeshes[VariantIndex];
+			bSpecialAuthoredBuilding = AuthoredGroup && AuthoredMesh;
+		}
+		else if (Style != 5 && AcceptedIndex % SolCityGeneration::AuthoredBuildingInterval == 0)
 		{
 			switch ((AcceptedIndex / SolCityGeneration::AuthoredBuildingInterval) % 3)
 			{
@@ -1344,7 +1570,7 @@ void ASolCityGenerator::GenerateBuildings()
 			}
 		}
 
-		float AuthoredUniformScale = GetAuthoredBuildingUniformScale(AuthoredMesh);
+		float AuthoredUniformScale = bSpecialAuthoredBuilding ? 1.0f : GetAuthoredBuildingUniformScale(AuthoredMesh);
 		if (AuthoredMesh)
 		{
 			const FVector MeshSize = AuthoredMesh->GetBoundingBox().GetSize();
@@ -1353,7 +1579,8 @@ void ASolCityGenerator::GenerateBuildings()
 				const float ParcelScale = FMath::Min(Footprint.X / MeshSize.X, Footprint.Y / MeshSize.Y) * 0.92f;
 				AuthoredUniformScale = FMath::Min(AuthoredUniformScale, ParcelScale);
 			}
-			if (AuthoredUniformScale < 0.24f)
+			const float MinimumUsefulScale = Style == 6 ? 0.34f : (bSpecialAuthoredBuilding ? 0.55f : 0.24f);
+			if (AuthoredUniformScale < MinimumUsefulScale)
 			{
 				AuthoredGroup = nullptr;
 				AuthoredMesh = nullptr;
@@ -1377,20 +1604,67 @@ void ASolCityGenerator::GenerateBuildings()
 			return false;
 		}
 
-		if (!AuthoredMesh || !AddAuthoredBuilding(AuthoredGroup, AuthoredMesh, Candidate, Yaw, AuthoredUniformScale))
+		const float AuthoredVerticalScale = Style == 6
+			? FMath::Max(AuthoredUniformScale, 0.86f)
+			: AuthoredUniformScale;
+		const bool bPlacedAuthoredBuilding = AuthoredMesh && AddAuthoredBuilding(
+			AuthoredGroup, AuthoredMesh, Candidate, Yaw, AuthoredUniformScale, AuthoredVerticalScale);
+		if (!bPlacedAuthoredBuilding)
 		{
 			AddBuildingMass(Candidate, Footprint, Yaw, Style, Height);
-			TaperedBuildingCount += Style == 2 ? 1 : 0;
-			TwinTowerBuildingCount += Style == 5 ? 1 : 0;
-			OuterLowRiseCount += Style == 4 ? 1 : 0;
 			OccupiedExtent = SolCityGeneration::RotatedExtent2D(Footprint, Yaw);
 		}
+		TaperedBuildingCount += Style == 2 ? 1 : 0;
+		TwinTowerBuildingCount += Style == 5 ? 1 : 0;
+		MegaCbdBuildingCount += Style == 6 ? 1 : 0;
+		OuterLowRiseCount += Style == 4 ? 1 : 0;
 
 		FBuildingFootprint& NewFootprint = OccupiedBuildings.AddDefaulted_GetRef();
 		NewFootprint.Center = Candidate;
 		NewFootprint.Extent = OccupiedExtent;
 		return true;
 	};
+
+	// Reserve the largest central block interiors for one of each authored mega
+	// tower before ordinary frontage lots consume them. These are true landmark
+	// parcels rather than point scatter, and retain a 44 m development plate.
+	TArray<int32> LandmarkBlockIndices;
+	for (int32 BlockIndex = 0; BlockIndex < Blocks.Num(); ++BlockIndex)
+	{
+		const SolCityLotLayout::FCityBlock& Block = Blocks[BlockIndex];
+		if (Block.Centroid.Size() <= HalfCity * 0.50f && Block.Area >= FMath::Square(5500.0f))
+		{
+			LandmarkBlockIndices.Add(BlockIndex);
+		}
+	}
+	LandmarkBlockIndices.Sort([&Blocks](const int32 A, const int32 B)
+	{
+		return Blocks[A].Centroid.SizeSquared() < Blocks[B].Centroid.SizeSquared();
+	});
+	for (const int32 BlockIndex : LandmarkBlockIndices)
+	{
+		if (MegaCbdBuildingCount >= 4 || Accepted >= EffectiveTargetCount)
+		{
+			break;
+		}
+		const SolCityLotLayout::FCityBlock& Block = Blocks[BlockIndex];
+		float LandmarkYaw = 0.0f;
+		float LongestEdgeSquared = 0.0f;
+		for (const SolCityLotLayout::FBlockEdge& Edge : Block.Edges)
+		{
+			const FVector2D EdgeDelta = Edge.End - Edge.Start;
+			if (EdgeDelta.SizeSquared() > LongestEdgeSquared)
+			{
+				LongestEdgeSquared = EdgeDelta.SizeSquared();
+				LandmarkYaw = FMath::RadiansToDegrees(FMath::Atan2(EdgeDelta.Y, EdgeDelta.X));
+			}
+		}
+		if (TryPlaceBuilding(Block.Centroid, FVector2D(4000.0f, 4000.0f), LandmarkYaw, 6,
+			Random.FRandRange(14500.0f, 17500.0f), Accepted))
+		{
+			++Accepted;
+		}
+	}
 
 	int32 MaximumLotsInBlock = 0;
 	for (const TArray<SolCityLotLayout::FCityLot>& BlockLots : LotsByBlock)
@@ -1409,21 +1683,21 @@ void ASolCityGenerator::GenerateBuildings()
 			const float NormalizedRadius = FMath::Clamp(Lot.Center.Size() / HalfCity, 0.0f, 1.0f);
 			const float CenterBias = 1.0f - NormalizedRadius;
 			const bool bOuterResidential = NormalizedRadius >= 0.62f;
-			const float Height = bOuterResidential
+			float Height = bOuterResidential
 				? Random.FRandRange(650.0f, 1050.0f)
 				: Random.FRandRange(
 					SolCityGeneration::StandardLaneWidth * (2.8f + CenterBias * 2.2f),
 					SolCityGeneration::StandardLaneWidth * (5.5f + CenterBias * 12.5f));
-			int32 Style = bOuterResidential ? 4 : (Lot.bCornerLot ? 1 : Random.RandRange(0, 5));
-			const FVector2D PlacementFootprint = bOuterResidential
-				? Lot.Footprint * FVector2D(0.66f, 0.62f)
-				: Lot.Footprint;
-			if (!Lot.bCornerLot && TwinTowerBuildingCount == 0 &&
-				!bOuterResidential && PlacementFootprint.X * PlacementFootprint.Y >= 850000.0f && Height >= 1800.0f)
+			const bool bMegaCbdCandidate = !bOuterResidential && !Lot.bCornerLot && CenterBias >= 0.72f &&
+				Lot.Footprint.X * Lot.Footprint.Y >= 2500000.0f && MegaCbdBuildingCount < 8;
+			int32 Style = bMegaCbdCandidate ? 6 : (bOuterResidential ? 4 : (Lot.bCornerLot ? 1 : Random.RandRange(0, 5)));
+			if (bMegaCbdCandidate)
 			{
-				// Every deterministic city contains at least one landmark twin tower.
-				Style = 5;
+				Height = Random.FRandRange(10500.0f, 16500.0f);
 			}
+			const FVector2D PlacementFootprint = bOuterResidential
+				? Lot.Footprint * FVector2D(0.92f, 0.86f)
+				: Lot.Footprint;
 			if (TryPlaceBuilding(Lot.Center, PlacementFootprint, Lot.YawDegrees, Style, Height, Accepted))
 			{
 				++Accepted;
@@ -1468,7 +1742,7 @@ void ASolCityGenerator::GenerateBuildings()
 					continue;
 				}
 				const FVector2D Footprint = bOuterResidential
-					? ParcelFootprint * FVector2D(0.68f, 0.62f)
+					? ParcelFootprint * FVector2D(0.90f, 0.84f)
 					: ParcelFootprint;
 				const FVector2D Candidate = FrontCenter + Normal * Side * (
 					Segment.HalfWidth + SolCityGeneration::ProceduralRoadSetback + ParcelFootprint.Y * 0.5f + 45.0f);
@@ -1489,8 +1763,8 @@ void ASolCityGenerator::GenerateBuildings()
 		}
 	}
 
-	UE_LOG(LogTemp, Display, TEXT("SolCity parcel layout: blocks=%d buildings=%d/%d parks=%d parking=%d courtyards=%d tapered=%d twinSkybridge=%d outerLowRise=%d"),
-		Blocks.Num(), Accepted, EffectiveTargetCount, ParkCount, ParkingCount, CourtyardCount, TaperedBuildingCount, TwinTowerBuildingCount, OuterLowRiseCount);
+	UE_LOG(LogTemp, Display, TEXT("SolCity parcel layout: blocks=%d buildings=%d/%d parks=%d parking=%d courtyards=%d tapered=%d twinSkybridge=%d megaCBD=%d outerLowRise=%d"),
+		Blocks.Num(), Accepted, EffectiveTargetCount, ParkCount, ParkingCount, CourtyardCount, TaperedBuildingCount, TwinTowerBuildingCount, MegaCbdBuildingCount, OuterLowRiseCount);
 }
 
 float ASolCityGenerator::GetAuthoredBuildingUniformScale(UStaticMesh* Mesh) const
@@ -1532,7 +1806,8 @@ bool ASolCityGenerator::AddAuthoredBuilding(
 	UStaticMesh* Mesh,
 	const FVector2D& Center,
 	float YawDegrees,
-	float UniformScale)
+	float UniformScale,
+	float VerticalScale)
 {
 	if (!Group || !Mesh)
 	{
@@ -1546,11 +1821,12 @@ bool ASolCityGenerator::AddAuthoredBuilding(
 		return false;
 	}
 
+	const float AppliedVerticalScale = VerticalScale > 0.0f ? VerticalScale : UniformScale;
 	const FRotator Rotation(0.0f, YawDegrees, 0.0f);
-	const FVector UniformScale3D(UniformScale);
-	const FVector DesiredCenter(Center.X, Center.Y, MeshSize.Z * UniformScale * 0.5f);
-	const FVector Translation = DesiredCenter - Rotation.RotateVector(Bounds.GetCenter() * UniformScale3D);
-	Group->AddInstance(FTransform(Rotation, Translation, UniformScale3D));
+	const FVector AuthoredScale(UniformScale, UniformScale, AppliedVerticalScale);
+	const FVector DesiredCenter(Center.X, Center.Y, MeshSize.Z * AppliedVerticalScale * 0.5f);
+	const FVector Translation = DesiredCenter - Rotation.RotateVector(Bounds.GetCenter() * AuthoredScale);
+	Group->AddInstance(FTransform(Rotation, Translation, AuthoredScale));
 	return true;
 }
 
@@ -1573,10 +1849,10 @@ void ASolCityGenerator::AddBuildingMass(const FVector2D& Center, const FVector2D
 	const int32 MinimumMidFloorCount = Style == 4 ? 0 : 1;
 	const int32 RequestedMidFloorCount = FMath::Max(MinimumMidFloorCount,
 		FMath::RoundToInt((Height - BaseModuleHeight - CrownModuleHeight) / MidModuleHeight));
-	const float MaximumHeightToWidthRatio = (Style == 2 || Style == 5) ? 3.20f : 2.60f;
+	const float MaximumHeightToWidthRatio = Style == 6 ? 5.50f : ((Style == 2 || Style == 5) ? 4.20f : 2.60f);
 	const int32 AspectRatioFloorCap = FMath::Max(MinimumMidFloorCount, FMath::FloorToInt(
 		(Footprint.GetMin() * MaximumHeightToWidthRatio - BaseModuleHeight - CrownModuleHeight) / MidModuleHeight));
-	const int32 StyleFloorCap = (Style == 2 || Style == 5) ? 16 : (Style == 4 ? 2 : 10);
+	const int32 StyleFloorCap = Style == 6 ? 44 : (Style == 5 ? 30 : (Style == 2 ? 22 : (Style == 4 ? 2 : 10)));
 	const int32 MidFloorCount = FMath::Clamp(RequestedMidFloorCount, MinimumMidFloorCount, FMath::Min(AspectRatioFloorCap, StyleFloorCap));
 	float HighestRoofZ = BaseModuleHeight + MidFloorCount * MidModuleHeight;
 	FVector2D RoofFootprint = Footprint;
@@ -1734,37 +2010,79 @@ void ASolCityGenerator::AddBuildingMass(const FVector2D& Center, const FVector2D
 			AddStack(BuildingCrownModuleInstances, BuildingCrownModuleMesh, TowerOffset, TowerSize * 0.90f, HighestRoofZ, 1);
 		}
 
-		const int32 BridgeFloor = FMath::Clamp(FMath::FloorToInt(MidFloorCount * 0.62f), 1, FMath::Max(1, MidFloorCount - 1));
-		const float BridgeBottomZ = BaseModuleHeight + BridgeFloor * MidModuleHeight;
 		const float DesiredBridgeLength = FMath::Max(300.0f, TwinTowerOffset.X * 2.0f - TowerSize.X + 140.0f);
-		if (SkybridgeConnectorInstances && SkybridgeConnectorMesh)
+		TArray<int32> BridgeFloors;
+		BridgeFloors.Add(FMath::Clamp(FMath::FloorToInt(MidFloorCount * 0.48f), 1, FMath::Max(1, MidFloorCount - 1)));
+		if (MidFloorCount >= 8)
 		{
-			const FVector MeshSize = SkybridgeConnectorMesh->GetBoundingBox().GetSize();
-			if (MeshSize.GetMin() > KINDA_SMALL_NUMBER)
-			{
-				const FVector Scale(
-					DesiredBridgeLength / MeshSize.X,
-					FMath::Min(1.0f, TowerSize.Y * 0.42f / MeshSize.Y),
-					1.0f);
-				SkybridgeConnectorInstances->AddInstance(FTransform(
-					FRotator(0.0f, YawDegrees, 0.0f),
-					FVector(Center.X, Center.Y, BridgeBottomZ),
-					Scale));
-			}
+			BridgeFloors.Add(FMath::Clamp(FMath::FloorToInt(MidFloorCount * 0.74f), 2, MidFloorCount - 1));
 		}
-		else
+		for (const int32 BridgeFloor : BridgeFloors)
 		{
-			AddBox(
-				DetailInstances,
-				FVector(Center.X, Center.Y, BridgeBottomZ + MidModuleHeight * 0.42f),
-				FVector(DesiredBridgeLength, TowerSize.Y * 0.34f, MidModuleHeight * 0.84f),
-				YawDegrees);
+			const float BridgeBottomZ = BaseModuleHeight + BridgeFloor * MidModuleHeight;
+			if (SkybridgeConnectorInstances && SkybridgeConnectorMesh)
+			{
+				const FVector MeshSize = SkybridgeConnectorMesh->GetBoundingBox().GetSize();
+				if (MeshSize.GetMin() > KINDA_SMALL_NUMBER)
+				{
+					const FVector Scale(
+						DesiredBridgeLength / MeshSize.X,
+						FMath::Clamp(TowerSize.Y * 0.48f / MeshSize.Y, 0.90f, 1.60f),
+						FMath::Max(1.0f, MidModuleHeight * 0.90f / MeshSize.Z));
+					SkybridgeConnectorInstances->AddInstance(FTransform(
+						FRotator(0.0f, YawDegrees, 0.0f),
+						FVector(Center.X, Center.Y, BridgeBottomZ),
+						Scale));
+				}
+			}
+			else
+			{
+				AddBox(
+					DetailInstances,
+					FVector(Center.X, Center.Y, BridgeBottomZ + MidModuleHeight * 0.45f),
+					FVector(DesiredBridgeLength, TowerSize.Y * 0.42f, MidModuleHeight * 0.90f),
+					YawDegrees);
+			}
 		}
 
 		HighestRoofZ += CrownModuleHeight;
 		RoofFootprint = TowerSize * 0.90f;
 		RoofLocalOffset = TwinTowerOffset;
 		bTwinTower = true;
+		break;
+	}
+	case 6: // Super-scale CBD tower with a broad podium and monotonic setbacks.
+	{
+		AddStack(BuildingBaseModuleInstances, BuildingBaseModuleMesh, FVector2D::ZeroVector, Footprint, 0.0f, 1);
+		FVector2D PreviousSize = Footprint * 0.92f;
+		FVector2D PreviousOffset = FVector2D::ZeroVector;
+		const float AnchorX = Random.RandRange(0, 1) == 0 ? -1.0f : 1.0f;
+		const float AnchorY = Random.RandRange(0, 1) == 0 ? -1.0f : 1.0f;
+		for (int32 FloorIndex = 0; FloorIndex < MidFloorCount; ++FloorIndex)
+		{
+			FVector2D FloorSize = PreviousSize;
+			FVector2D FloorOffset = PreviousOffset;
+			if (FloorIndex > 0 && FloorIndex % 6 == 0)
+			{
+				const FVector2D NextSize(
+					FMath::Max(Footprint.X * 0.42f, PreviousSize.X * 0.80f),
+					FMath::Max(Footprint.Y * 0.42f, PreviousSize.Y * 0.84f));
+				const FVector2D Shift = (PreviousSize - NextSize) * 0.5f;
+				FloorOffset += FVector2D(Shift.X * AnchorX, Shift.Y * AnchorY);
+				FloorSize = NextSize;
+			}
+			AddStack(BuildingMiddleModuleInstances, BuildingMiddleModuleMesh, FloorOffset, FloorSize,
+				BaseModuleHeight + FloorIndex * MidModuleHeight, 1);
+			PreviousSize = FloorSize;
+			PreviousOffset = FloorOffset;
+		}
+		const FVector2D CrownSize = PreviousSize * 0.88f;
+		const FVector2D CrownShift = (PreviousSize - CrownSize) * 0.5f;
+		const FVector2D CrownOffset = PreviousOffset + FVector2D(CrownShift.X * AnchorX, CrownShift.Y * AnchorY);
+		AddStack(BuildingCrownModuleInstances, BuildingCrownModuleMesh, CrownOffset, CrownSize, HighestRoofZ, 1);
+		HighestRoofZ += CrownModuleHeight;
+		RoofFootprint = CrownSize;
+		RoofLocalOffset = CrownOffset;
 		break;
 	}
 	case 4: // Small anime-neighborhood row houses
@@ -1885,13 +2203,13 @@ void ASolCityGenerator::AddBuildingMass(const FVector2D& Center, const FVector2D
 
 void ASolCityGenerator::GenerateTrees()
 {
-	if (!TreeInstances || !AuthoredTreeMesh)
+	const int32 ConiferVariantCount = FMath::Min(ConiferMeshes.Num(), ConiferInstances.Num());
+	if ((!TreeInstances || !AuthoredTreeMesh) && ConiferVariantCount == 0)
 	{
 		return;
 	}
-	const FBox Bounds = AuthoredTreeMesh->GetBoundingBox();
 	const float HalfCity = CityDiameter * 0.5f - 450.0f;
-	const int32 TargetTrees = FMath::Clamp(FMath::RoundToInt(CityDiameter / 100.0f), 240, 480);
+	const int32 TargetTrees = FMath::Clamp(FMath::RoundToInt(CityDiameter / 90.0f), 480, 1800);
 	TArray<FVector2D> PlacedTrees;
 	PlacedTrees.Reserve(TargetTrees);
 	int32 Added = 0;
@@ -1938,11 +2256,28 @@ void ASolCityGenerator::GenerateTrees()
 		{
 			continue;
 		}
-		const float UniformScale = Random.FRandRange(0.82f, 1.18f);
+		const bool bUseConifer = ConiferVariantCount > 0 &&
+			((!TreeInstances || !AuthoredTreeMesh) || (bOuterNeighborhood && Random.FRand() < 0.38f));
+		UStaticMesh* SelectedMesh = AuthoredTreeMesh;
+		UHierarchicalInstancedStaticMeshComponent* SelectedGroup = TreeInstances;
+		if (bUseConifer)
+		{
+			const int32 VariantIndex = (Added + Seed) % ConiferVariantCount;
+			SelectedMesh = ConiferMeshes[VariantIndex];
+			SelectedGroup = ConiferInstances[VariantIndex];
+		}
+		if (!SelectedMesh || !SelectedGroup)
+		{
+			continue;
+		}
+		const FBox Bounds = SelectedMesh->GetBoundingBox();
+		const float UniformScale = bUseConifer
+			? Random.FRandRange(0.72f, 1.12f)
+			: Random.FRandRange(0.82f, 1.18f);
 		const FRotator Rotation(0.0f, Random.FRandRange(-180.0f, 180.0f), 0.0f);
 		const FVector Scale(UniformScale);
 		const FVector DesiredCenter(Candidate.X, Candidate.Y, Bounds.GetSize().Z * UniformScale * 0.5f);
-		TreeInstances->AddInstance(FTransform(Rotation, DesiredCenter - Rotation.RotateVector(Bounds.GetCenter() * Scale), Scale));
+		SelectedGroup->AddInstance(FTransform(Rotation, DesiredCenter - Rotation.RotateVector(Bounds.GetCenter() * Scale), Scale));
 		PlacedTrees.Add(Candidate);
 		++Added;
 	}
@@ -2039,11 +2374,13 @@ void ASolCityGenerator::GenerateTrafficFurniture()
 	UHierarchicalInstancedStaticMeshComponent* BillboardGroups[] = {
 		BillboardInstances01, BillboardInstances02, BillboardInstances03, BillboardInstances04
 	};
+	const int32 TargetBillboards = FMath::Clamp(FMath::RoundToInt(CityDiameter / 3000.0f), 24, 48);
+	constexpr float BillboardDisplayScale = 1.25f;
 	int32 BillboardCount = 0;
-	for (int32 RoadIndex = 0; RoadIndex < RoadSegments.Num() && BillboardCount < 12; ++RoadIndex)
+	for (int32 RoadIndex = 0; RoadIndex < RoadSegments.Num() && BillboardCount < TargetBillboards; ++RoadIndex)
 	{
 		const FSolCityRoadSegment& Segment = RoadSegments[RoadIndex];
-		if (Segment.bBridge || Segment.RoadClass == ESolCityRoadClass::Local || (RoadIndex + Seed) % 3 != 0)
+		if (Segment.bBridge || Segment.RoadClass == ESolCityRoadClass::Local || (RoadIndex + Seed) % 2 != 0)
 		{
 			continue;
 		}
@@ -2056,25 +2393,34 @@ void ASolCityGenerator::GenerateTrafficFurniture()
 		}
 		const FVector2D Along = Delta.GetSafeNormal();
 		const FVector2D Normal(-Along.Y, Along.X);
-		const float Side = (RoadIndex & 1) == 0 ? 1.0f : -1.0f;
 		const float SidewalkWidth = SolCityGeneration::SidewalkWidthForRoadClass(Segment.RoadClass);
-		const FVector2D Candidate = (Start + End) * 0.5f + Normal * Side * (
-			Segment.HalfWidth + SidewalkWidth + 420.0f);
-		const float Yaw = FMath::RadiansToDegrees(FMath::Atan2(Along.Y, Along.X));
-		const FVector2D Extent = SolCityGeneration::RotatedExtent2D(FVector2D(650.0f, 180.0f), Yaw);
-		if (IsInsideRiver(Candidate, 250.0f) || !IsBuildingSiteFree(Candidate, Extent))
+		const float BaseYaw = FMath::RadiansToDegrees(FMath::Atan2(Along.Y, Along.X));
+		for (const float Side : {-1.0f, 1.0f})
 		{
-			continue;
+			const FVector2D Candidate = (Start + End) * 0.5f + Normal * Side * (
+				Segment.HalfWidth + SolCityGeneration::CurbWidth + SidewalkWidth + 460.0f);
+			const float Yaw = BaseYaw + (Side < 0.0f ? 180.0f : 0.0f);
+			const FVector2D Extent = SolCityGeneration::RotatedExtent2D(
+				FVector2D(650.0f, 180.0f) * BillboardDisplayScale, Yaw);
+			if (IsInsideRiver(Candidate, 250.0f) || !IsBuildingSiteFree(Candidate, Extent))
+			{
+				continue;
+			}
+			UHierarchicalInstancedStaticMeshComponent* Group = BillboardGroups[BillboardCount % 4];
+			if (!Group)
+			{
+				continue;
+			}
+			Group->AddInstance(FTransform(FRotator(0.0f, Yaw, 0.0f),
+				FVector(Candidate.X, Candidate.Y, SolCityGeneration::GroundZoneSurfaceZ), FVector(BillboardDisplayScale)));
+			FBuildingFootprint& Reserved = OccupiedBuildings.AddDefaulted_GetRef();
+			Reserved.Center = Candidate;
+			Reserved.Extent = Extent;
+			++BillboardCount;
+			if (BillboardCount >= TargetBillboards)
+			{
+				break;
+			}
 		}
-		UHierarchicalInstancedStaticMeshComponent* Group = BillboardGroups[BillboardCount % 4];
-		if (!Group)
-		{
-			continue;
-		}
-		Group->AddInstance(FTransform(FRotator(0.0f, Yaw, 0.0f), FVector(Candidate.X, Candidate.Y, 16.0f), FVector::OneVector));
-		FBuildingFootprint& Reserved = OccupiedBuildings.AddDefaulted_GetRef();
-		Reserved.Center = Candidate;
-		Reserved.Extent = Extent;
-		++BillboardCount;
 	}
 }

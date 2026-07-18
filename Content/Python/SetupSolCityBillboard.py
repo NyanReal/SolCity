@@ -52,27 +52,33 @@ def import_texture(path):
 def create_master():
     path = f"{MATERIAL_DIR}/{MASTER_NAME}"
     master = unreal.EditorAssetLibrary.load_asset(path)
+    created_new = master is None
     if not master:
         master = unreal.AssetToolsHelpers.get_asset_tools().create_asset(
             MASTER_NAME, MATERIAL_DIR, unreal.Material, unreal.MaterialFactoryNew()
         )
     if not isinstance(master, unreal.Material):
         raise RuntimeError(f"{path} exists but is not a Material")
-    unreal.MaterialEditingLibrary.delete_all_material_expressions(master)
-    sample = unreal.MaterialEditingLibrary.create_material_expression(
-        master, unreal.MaterialExpressionTextureSampleParameter2D, -260, 0
-    )
-    sample.set_editor_property("parameter_name", "AdTexture")
-    roughness = unreal.MaterialEditingLibrary.create_material_expression(
-        master, unreal.MaterialExpressionConstant, -40, 180
-    )
-    roughness.set_editor_property("r", 0.38)
-    unreal.MaterialEditingLibrary.connect_material_property(
-        sample, "RGB", unreal.MaterialProperty.MP_BASE_COLOR
-    )
-    unreal.MaterialEditingLibrary.connect_material_property(
-        roughness, "", unreal.MaterialProperty.MP_ROUGHNESS
-    )
+    master.set_editor_property("used_with_instanced_static_meshes", True)
+    master.set_editor_property("two_sided", True)
+    # UE 5.7 may assert when delete_all_material_expressions is called on an
+    # already-loaded rooted material. Preserve the existing graph and only
+    # author expressions when creating this master for the first time.
+    if created_new:
+        sample = unreal.MaterialEditingLibrary.create_material_expression(
+            master, unreal.MaterialExpressionTextureSampleParameter2D, -260, 0
+        )
+        sample.set_editor_property("parameter_name", "AdTexture")
+        roughness = unreal.MaterialEditingLibrary.create_material_expression(
+            master, unreal.MaterialExpressionConstant, -40, 180
+        )
+        roughness.set_editor_property("r", 0.38)
+        unreal.MaterialEditingLibrary.connect_material_property(
+            sample, "RGB", unreal.MaterialProperty.MP_BASE_COLOR
+        )
+        unreal.MaterialEditingLibrary.connect_material_property(
+            roughness, "", unreal.MaterialProperty.MP_ROUGHNESS
+        )
     unreal.MaterialEditingLibrary.recompile_material(master)
     unreal.EditorAssetLibrary.save_loaded_asset(master)
     return master

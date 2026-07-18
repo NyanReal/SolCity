@@ -79,10 +79,10 @@ public:
 	int32 Seed = 71527;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sol City|Generation", meta = (ClampMin = "6000.0", UIMin = "6000.0"))
-	float CityDiameter = 48000.0f;
+	float CityDiameter = 144000.0f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sol City|River", meta = (ClampMin = "500.0", ClampMax = "2500.0"))
-	float RiverWidth = 2400.0f;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sol City|River", meta = (ClampMin = "500.0", ClampMax = "10000.0"))
+	float RiverWidth = 6000.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sol City|River")
 	float RiverSurfaceZ = -90.0f;
@@ -90,8 +90,8 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sol City|River")
 	float WaterPanSpeed = 0.035f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sol City|Buildings", meta = (ClampMin = "12", ClampMax = "480"))
-	int32 TargetBuildingCount = 320;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sol City|Buildings", meta = (ClampMin = "12", ClampMax = "2400"))
+	int32 TargetBuildingCount = 1500;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sol City|Generation")
 	bool bGenerateInEditor = true;
@@ -148,6 +148,12 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sol City|Buildings")
 	TObjectPtr<UStaticMesh> AuthoredSteppedTowerMesh;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sol City|Buildings|Suburban")
+	TArray<TObjectPtr<UStaticMesh>> SuburbanHouseMeshes;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sol City|Buildings|Mega CBD")
+	TArray<TObjectPtr<UStaticMesh>> MegaSkyscraperMeshes;
+
 	/** Fixed-height authored modules used for every variable-height procedural building. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sol City|Buildings|Modules")
 	TObjectPtr<UStaticMesh> BuildingBaseModuleMesh;
@@ -203,6 +209,9 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sol City|Foliage")
 	TObjectPtr<UStaticMesh> AuthoredTreeMesh;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sol City|Foliage")
+	TArray<TObjectPtr<UStaticMesh>> ConiferMeshes;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sol City|Urban Props")
 	TObjectPtr<UStaticMesh> BenchMesh;
@@ -306,10 +315,13 @@ private:
 	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> AuthoredBuildingInstances;
 	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> AuthoredCornerRetailInstances;
 	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> AuthoredSteppedTowerInstances;
+	TArray<TObjectPtr<UHierarchicalInstancedStaticMeshComponent>> SuburbanHouseInstances;
+	TArray<TObjectPtr<UHierarchicalInstancedStaticMeshComponent>> MegaSkyscraperInstances;
 	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> BridgeInstances;
 	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> AuthoredBridgeInstances;
 	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> JunctionInstances;
 	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> TreeInstances;
+	TArray<TObjectPtr<UHierarchicalInstancedStaticMeshComponent>> ConiferInstances;
 	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> BenchInstances;
 	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> TrashBinInstances;
 	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> StreetLampInstances;
@@ -352,6 +364,7 @@ private:
 	void AddBox(UHierarchicalInstancedStaticMeshComponent* Group, const FVector& Center, const FVector& Size, float YawDegrees = 0.0f);
 	void AddCylinder(UHierarchicalInstancedStaticMeshComponent* Group, const FVector& Center, float Radius, float Height, float YawDegrees = 0.0f);
 	void AddRoadSegment(const FVector& Start, const FVector& End, float Width, ESolCityRoadClass RoadClass, bool bAddSidewalks = true, bool bBridge = false, bool bCreateVisual = true);
+	void GenerateRoadEdgeStrips();
 	void AddPolylineRoad(const TArray<FVector>& Points, float Width, ESolCityRoadClass RoadClass, bool bAddSidewalks = true);
 	void AddSplineRoadVisual(const TArray<FVector>& Points, float Width);
 	void AddRoadMarkings(const FVector& Start, const FVector& End, float Width, ESolCityRoadClass RoadClass, bool bBridge);
@@ -362,7 +375,8 @@ private:
 		UStaticMesh* Mesh,
 		const FVector2D& Center,
 		float YawDegrees,
-		float UniformScale);
+		float UniformScale,
+		float VerticalScale = -1.0f);
 	float GetAuthoredBuildingUniformScale(UStaticMesh* Mesh) const;
 	FVector2D GetAuthoredBuildingExtent(UStaticMesh* Mesh, float YawDegrees, float UniformScale) const;
 
