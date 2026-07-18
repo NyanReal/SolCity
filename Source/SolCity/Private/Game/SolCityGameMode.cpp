@@ -147,24 +147,30 @@ void ASolCityGameMode::BeginPlay()
 		{
 			Sun->SetActorScale3D(FVector(2.5f));
 		}
-		Sun->GetLightComponent()->SetMobility(EComponentMobility::Movable);
-		Sun->GetLightComponent()->SetIntensity(3.4f);
-		Sun->GetLightComponent()->SetIndirectLightingIntensity(1.05f);
-		Sun->GetLightComponent()->SetLightColor(FLinearColor(1.0f, 0.94f, 0.86f));
-		Sun->GetLightComponent()->SetVolumetricScatteringIntensity(0.8f);
-		UDirectionalLightComponent* SunComponent = Sun->GetComponent();
-		SunComponent->SetLightSourceAngle(1.0f);
-		SunComponent->SetShadowSourceAngleFactor(1.0f);
-		SunComponent->ContactShadowLength = 0.035f;
-		SunComponent->ContactShadowLengthInWS = false;
-		SunComponent->ContactShadowCastingIntensity = 0.65f;
-		SunComponent->ContactShadowNonCastingIntensity = 0.0f;
-		SunComponent->SetAtmosphereSunLight(true);
-		SunComponent->bCastCloudShadows = true;
-		SunComponent->CloudShadowStrength = 0.35f;
-		SunComponent->CloudShadowOnSurfaceStrength = 0.35f;
-		SunComponent->CloudShadowOnAtmosphereStrength = 0.25f;
-		SunComponent->MarkRenderStateDirty();
+		if (UDirectionalLightComponent* SunComponent = Cast<UDirectionalLightComponent>(Sun->GetLightComponent()))
+		{
+			SunComponent->SetMobility(EComponentMobility::Movable);
+			SunComponent->SetIntensity(3.4f);
+			SunComponent->SetIndirectLightingIntensity(1.05f);
+			SunComponent->SetLightColor(FLinearColor(1.0f, 0.94f, 0.86f));
+			SunComponent->SetVolumetricScatteringIntensity(0.8f);
+			SunComponent->SetLightSourceAngle(1.0f);
+			SunComponent->SetShadowSourceAngleFactor(1.0f);
+			SunComponent->ContactShadowLength = 0.035f;
+			SunComponent->ContactShadowLengthInWS = false;
+			SunComponent->ContactShadowCastingIntensity = 0.65f;
+			SunComponent->ContactShadowNonCastingIntensity = 0.0f;
+			SunComponent->SetAtmosphereSunLight(true);
+			SunComponent->bCastCloudShadows = true;
+			SunComponent->CloudShadowStrength = 0.35f;
+			SunComponent->CloudShadowOnSurfaceStrength = 0.35f;
+			SunComponent->CloudShadowOnAtmosphereStrength = 0.25f;
+			SunComponent->MarkRenderStateDirty();
+		}
+		else
+		{
+			UE_LOG(LogSolCityEnvironment, Error, TEXT("Directional Sun has no directional light component: %s"), *Sun->GetPathName());
+		}
 	}
 
 	if (AExponentialHeightFog* Fog = ReuseOrSpawnEnvironmentActor<AExponentialHeightFog>(
