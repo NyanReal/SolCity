@@ -5,6 +5,7 @@
 #include "SolCityAutonomousVehicle.generated.h"
 
 class ASolCityRoadNetwork;
+class USceneComponent;
 class UStaticMeshComponent;
 
 /** Lightweight kinematic traffic agent constrained to a directed road waypoint graph. */
@@ -61,6 +62,10 @@ protected:
 	bool SelectNextNode();
 	bool HasVehicleAhead() const;
 	bool MustStopAtSignal(float DistanceToTarget) const;
+
+	/** Keeps the actor's +X navigation axis independent from authored mesh axes. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Vehicle")
+	TObjectPtr<USceneComponent> VehicleRoot;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Vehicle")
 	TObjectPtr<UStaticMeshComponent> VehicleMesh;

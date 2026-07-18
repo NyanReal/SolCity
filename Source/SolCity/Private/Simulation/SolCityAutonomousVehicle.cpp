@@ -1,5 +1,6 @@
 #include "Simulation/SolCityAutonomousVehicle.h"
 
+#include "Components/SceneComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "EngineUtils.h"
 #include "Simulation/SolCityRoadNetwork.h"
@@ -8,8 +9,11 @@
 ASolCityAutonomousVehicle::ASolCityAutonomousVehicle()
 {
 	PrimaryActorTick.bCanEverTick = true;
+	VehicleRoot = CreateDefaultSubobject<USceneComponent>(TEXT("VehicleRoot"));
+	SetRootComponent(VehicleRoot);
+
 	VehicleMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("VehicleMesh"));
-	SetRootComponent(VehicleMesh);
+	VehicleMesh->SetupAttachment(VehicleRoot);
 	VehicleMesh->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
 	VehicleMesh->SetCollisionResponseToAllChannels(ECR_Overlap);
 	VehicleMesh->SetRelativeLocation(FVector(0.0f, 0.0f, 45.0f));
@@ -27,6 +31,9 @@ ASolCityAutonomousVehicle::ASolCityAutonomousVehicle()
 	{
 		VehicleMesh->SetStaticMesh(AuthoredVehicleAsset.Object);
 		VehicleMesh->SetRelativeLocation(FVector(0.0f, 0.0f, -15.0f));
+		// The Blender car points toward local -Y. Rotate it so its nose matches
+		// the actor/navigation convention of local +X without rotating sensing.
+		VehicleMesh->SetRelativeRotation(FRotator(0.0f, 90.0f, 0.0f));
 		VehicleMesh->SetRelativeScale3D(FVector(1.0f));
 		CabinMesh->SetVisibility(false);
 		CabinMesh->SetHiddenInGame(true);
