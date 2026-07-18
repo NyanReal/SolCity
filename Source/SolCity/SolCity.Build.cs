@@ -15,7 +15,16 @@ public class SolCity : ModuleRules
             "AIModule",
             "NavigationSystem",
             "GameplayTasks",
-            "ProceduralMeshComponent"
+            "ProceduralMeshComponent",
+            "Landscape"
         });
+
+        if (Target.bBuildEditor)
+        {
+            PrivateDependencyModuleNames.AddRange(new[]
+            {
+                "UnrealEd"
+            });
+        }
     }
 }

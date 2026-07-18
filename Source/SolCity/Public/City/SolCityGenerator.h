@@ -7,6 +7,7 @@
 class UHierarchicalInstancedStaticMeshComponent;
 class UMaterialInstanceDynamic;
 class UMaterialInterface;
+class UProceduralMeshComponent;
 class USceneComponent;
 class USplineComponent;
 class UStaticMesh;
@@ -75,9 +76,6 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sol City|Generation", meta = (ClampMin = "6000.0", UIMin = "6000.0"))
 	float CityDiameter = 36000.0f;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sol City|Generation", meta = (ClampMin = "250.0", ClampMax = "1000.0"))
-	float GroundTileSize = 500.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sol City|River", meta = (ClampMin = "500.0", ClampMax = "2500.0"))
 	float RiverWidth = 2400.0f;
@@ -178,7 +176,6 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<UMaterialInterface> DefaultSurfaceMaterial;
 
-	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> GroundInstances;
 	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> RoadInstances;
 	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> SidewalkInstances;
 	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> BuildingInstances;
@@ -187,13 +184,13 @@ private:
 	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> AuthoredCornerRetailInstances;
 	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> AuthoredSteppedTowerInstances;
 	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> RoofInstances;
-	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> WaterInstances;
 	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> BridgeInstances;
 	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> AuthoredBridgeInstances;
 	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> JunctionInstances;
 	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> TreeInstances;
 	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> DetailInstances;
 	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> CylinderInstances;
+	TObjectPtr<UProceduralMeshComponent> WaterSurfaceMesh;
 
 	TArray<FBuildingFootprint> OccupiedBuildings;
 	TArray<FVector2D> JunctionCapLocations;

@@ -8,6 +8,7 @@
 #include "Engine/StaticMesh.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Materials/MaterialInterface.h"
+#include "ProceduralMeshComponent.h"
 #include "UObject/ConstructorHelpers.h"
 
 namespace SolCityGeneration
@@ -15,8 +16,6 @@ namespace SolCityGeneration
 	constexpr float CubeSize = 100.0f;
 	constexpr float RoadSurfaceZ = 7.0f;
 	constexpr float SidewalkSurfaceZ = 16.0f;
-	constexpr float GroundThickness = 60.0f;
-	constexpr float RiverDepth = 130.0f;
 	constexpr float BridgeDeckZ = 105.0f;
 
 	FVector SafeNormal2D(const FVector& Value)
@@ -142,7 +141,6 @@ void ASolCityGenerator::ClearGeneratedComponents()
 		}
 	}
 	GeneratedComponents.Reset();
-	GroundInstances = nullptr;
 	RoadInstances = nullptr;
 	SidewalkInstances = nullptr;
 	BuildingInstances = nullptr;
@@ -151,20 +149,19 @@ void ASolCityGenerator::ClearGeneratedComponents()
 	AuthoredCornerRetailInstances = nullptr;
 	AuthoredSteppedTowerInstances = nullptr;
 	RoofInstances = nullptr;
-	WaterInstances = nullptr;
 	BridgeInstances = nullptr;
 	AuthoredBridgeInstances = nullptr;
 	JunctionInstances = nullptr;
 	TreeInstances = nullptr;
 	DetailInstances = nullptr;
 	CylinderInstances = nullptr;
+	WaterSurfaceMesh = nullptr;
 	WaterMID = nullptr;
 	bHasGenerated = false;
 }
 
 void ASolCityGenerator::CreateInstanceGroups()
 {
-	GroundInstances = CreateInstanceGroup(TEXT("GeneratedGround"), CubeMesh, GroundMaterial, FLinearColor(0.40f, 0.72f, 0.40f), true);
 	RoadInstances = CreateInstanceGroup(TEXT("GeneratedRoads"), CubeMesh, RoadMaterial, FLinearColor(0.12f, 0.16f, 0.20f), true);
 	SidewalkInstances = CreateInstanceGroup(TEXT("GeneratedSidewalks"), CubeMesh, SidewalkMaterial, FLinearColor(0.72f, 0.69f, 0.62f), true);
 	BuildingInstances = CreateInstanceGroup(TEXT("GeneratedBuildings"), CubeMesh, BuildingMaterial, FLinearColor(0.93f, 0.69f, 0.47f), true);
@@ -182,7 +179,6 @@ void ASolCityGenerator::CreateInstanceGroups()
 		AuthoredSteppedTowerInstances = CreateInstanceGroup(TEXT("GeneratedAuthoredSteppedTower"), AuthoredSteppedTowerMesh, nullptr, FLinearColor::White, true, false);
 	}
 	RoofInstances = CreateInstanceGroup(TEXT("GeneratedRoofs"), CubeMesh, RoofMaterial, FLinearColor(0.80f, 0.25f, 0.22f), true);
-	WaterInstances = CreateInstanceGroup(TEXT("GeneratedWater"), CubeMesh, WaterMaterial, FLinearColor(0.16f, 0.66f, 0.91f), false);
 	BridgeInstances = CreateInstanceGroup(TEXT("GeneratedBridge"), CubeMesh, BridgeMaterial, FLinearColor(0.80f, 0.78f, 0.69f), true);
 	if (AuthoredBridgeMesh)
 	{
@@ -200,13 +196,12 @@ void ASolCityGenerator::CreateInstanceGroups()
 	CylinderInstances = CreateInstanceGroup(TEXT("GeneratedCylinders"), CylinderMesh, BridgeMaterial, FLinearColor(0.68f, 0.66f, 0.60f), true);
 
 	UMaterialInterface* WaterBase = WaterMaterial.Get() ? WaterMaterial.Get() : DefaultSurfaceMaterial.Get();
-	if (WaterBase && WaterInstances)
+	if (WaterBase)
 	{
 		WaterMID = UMaterialInstanceDynamic::Create(WaterBase, this);
 		WaterMID->SetVectorParameterValue(TEXT("Color"), FLinearColor(0.16f, 0.66f, 0.91f));
 		WaterMID->SetVectorParameterValue(TEXT("BaseColorTint"), FLinearColor(0.16f, 0.66f, 0.91f));
 		WaterMID->SetVectorParameterValue(TEXT("WaterTint"), FLinearColor(0.10f, 0.60f, 0.88f, 0.82f));
-		WaterInstances->SetMaterial(0, WaterMID);
 	}
 }
 
@@ -276,38 +271,58 @@ bool ASolCityGenerator::IsInsideRiver(const FVector2D& Point, float Margin) cons
 void ASolCityGenerator::GenerateGroundAndRiver()
 {
 	const float HalfCity = CityDiameter * 0.5f;
-	const int32 SliceCount = FMath::Max(8, FMath::CeilToInt(CityDiameter / GroundTileSize));
-	const float SliceWidth = CityDiameter / static_cast<float>(SliceCount);
+	constexpr int32 SegmentCount = 192;
+	const float WaterHalfWidth = RiverWidth * 0.46f;
 
-	for (int32 SliceIndex = 0; SliceIndex < SliceCount; ++SliceIndex)
+	TArray<FVector> Vertices;
+	TArray<int32> Triangles;
+	TArray<FVector> Normals;
+	TArray<FVector2D> UV0;
+	TArray<FLinearColor> VertexColors;
+	TArray<FProcMeshTangent> Tangents;
+	Vertices.Reserve((SegmentCount + 1) * 2);
+	Normals.Reserve((SegmentCount + 1) * 2);
+	UV0.Reserve((SegmentCount + 1) * 2);
+	VertexColors.Reserve((SegmentCount + 1) * 2);
+	Tangents.Reserve((SegmentCount + 1) * 2);
+	Triangles.Reserve(SegmentCount * 6);
+
+	for (int32 Index = 0; Index <= SegmentCount; ++Index)
 	{
-		const float X = -HalfCity + (SliceIndex + 0.5f) * SliceWidth;
+		const float Alpha = Index / static_cast<float>(SegmentCount);
+		const float X = FMath::Lerp(-HalfCity, HalfCity, Alpha);
 		const float CenterY = RiverCenterY(X);
-		const float BankHalfWidth = RiverWidth * 0.5f;
+		Vertices.Add(FVector(X, CenterY - WaterHalfWidth, RiverSurfaceZ));
+		Vertices.Add(FVector(X, CenterY + WaterHalfWidth, RiverSurfaceZ));
+		Normals.Add(FVector::UpVector);
+		Normals.Add(FVector::UpVector);
+		UV0.Add(FVector2D(Alpha * CityDiameter / 1200.0f, 0.0f));
+		UV0.Add(FVector2D(Alpha * CityDiameter / 1200.0f, 1.0f));
+		VertexColors.Add(FLinearColor::White);
+		VertexColors.Add(FLinearColor::White);
+		Tangents.Add(FProcMeshTangent(1.0f, 0.0f, 0.0f));
+		Tangents.Add(FProcMeshTangent(1.0f, 0.0f, 0.0f));
 
-		// Every ground instance is one image tile. The small seam is intentional:
-		// it keeps a hand-built board-game quality at distant camera zoom levels.
-		for (int32 RowIndex = 0; RowIndex < SliceCount; ++RowIndex)
+		if (Index < SegmentCount)
 		{
-			const float Y = -HalfCity + (RowIndex + 0.5f) * SliceWidth;
-			const FVector2D TileCenter(X, Y);
-			if (!IsInsideRiver(TileCenter, SliceWidth * 0.58f))
-			{
-				AddBox(GroundInstances, FVector(X, Y, -SolCityGeneration::GroundThickness * 0.5f), FVector(SliceWidth - 8.0f, SliceWidth - 8.0f, SolCityGeneration::GroundThickness));
-			}
+			const int32 Base = Index * 2;
+			// Unreal's front face is clockwise when viewed from above.
+			Triangles.Append({Base, Base + 1, Base + 2, Base + 1, Base + 3, Base + 2});
 		}
+	}
 
-		const float NextX = -HalfCity + (SliceIndex + 1.5f) * SliceWidth;
-		const float NextY = RiverCenterY(NextX);
-		const FVector Start(X - SliceWidth * 0.55f, CenterY, RiverSurfaceZ - SolCityGeneration::RiverDepth * 0.5f);
-		const FVector End(X + SliceWidth * 0.55f, NextY, RiverSurfaceZ - SolCityGeneration::RiverDepth * 0.5f);
-		const FVector Delta = End - Start;
-		const float Yaw = FMath::RadiansToDegrees(FMath::Atan2(Delta.Y, Delta.X));
-		AddBox(WaterInstances, (Start + End) * 0.5f, FVector(Delta.Size2D() + 35.0f, RiverWidth * 0.96f, SolCityGeneration::RiverDepth), Yaw);
-
-		// Stone quay lips make the bank readable from a high city-builder camera.
-		AddBox(BridgeInstances, FVector(X, CenterY - BankHalfWidth, -36.0f), FVector(SliceWidth + 10.0f, 42.0f, 72.0f));
-		AddBox(BridgeInstances, FVector(X, CenterY + BankHalfWidth, -36.0f), FVector(SliceWidth + 10.0f, 42.0f, 72.0f));
+	WaterSurfaceMesh = NewObject<UProceduralMeshComponent>(this, TEXT("GeneratedContinuousRiver"));
+	WaterSurfaceMesh->SetupAttachment(SceneRoot);
+	WaterSurfaceMesh->SetMobility(EComponentMobility::Static);
+	WaterSurfaceMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	WaterSurfaceMesh->SetCanEverAffectNavigation(false);
+	WaterSurfaceMesh->RegisterComponent();
+	AddInstanceComponent(WaterSurfaceMesh);
+	GeneratedComponents.Add(WaterSurfaceMesh);
+	WaterSurfaceMesh->CreateMeshSection_LinearColor(0, Vertices, Triangles, Normals, UV0, VertexColors, Tangents, false);
+	if (WaterMID)
+	{
+		WaterSurfaceMesh->SetMaterial(0, WaterMID);
 	}
 }
 
