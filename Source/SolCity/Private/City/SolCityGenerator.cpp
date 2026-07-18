@@ -202,6 +202,16 @@ void ASolCityGenerator::Tick(float DeltaSeconds)
 		WaterMID->SetScalarParameterValue(TEXT("Time"), WaterTime);
 		WaterMID->SetScalarParameterValue(TEXT("PanSpeed"), WaterPanSpeed);
 	}
+	if (GetWorld() && GetWorld()->IsGameWorld() && !bRailwayTimePaused)
+	{
+		UpdateRailwayTrains(DeltaSeconds);
+	}
+}
+
+void ASolCityGenerator::ToggleRailwayTimePaused()
+{
+	bRailwayTimePaused = !bRailwayTimePaused;
+	UE_LOG(LogTemp, Display, TEXT("SolCity railway time: %s"), bRailwayTimePaused ? TEXT("Paused") : TEXT("Running"));
 }
 
 void ASolCityGenerator::RegenerateCity()
@@ -210,12 +220,16 @@ void ASolCityGenerator::RegenerateCity()
 	Random.Initialize(Seed);
 	RoadSegments.Reset();
 	RailwaySegments.Reset();
+	RailwayPathCumulativeDistances.Reset();
+	RailwayTrainInstanceIndices.Reset();
 	PedestrianWaypoints.Reset();
 	TrafficSignalLocations.Reset();
 	RailwayPathWaypoints.Reset();
 	OccupiedBuildings.Reset();
 	JunctionCapLocations.Reset();
 	WaterTime = 0.0f;
+	RailwayLoopLength = 0.0f;
+	RailwayTrainTravelDistance = 0.0f;
 
 	if (!CubeMesh || !CylinderMesh)
 	{
@@ -291,10 +305,11 @@ void ASolCityGenerator::RegenerateCity()
 		RiverPromenadeInstances ? RiverPromenadeInstances->GetInstanceCount() : 0,
 		RiverRailingInstances ? RiverRailingInstances->GetInstanceCount() : 0,
 		RiverGreenBankInstances ? RiverGreenBankInstances->GetInstanceCount() : 0);
-	UE_LOG(LogTemp, Display, TEXT("SolCity perimeter railway: segments=%d trackMeshes=%d bridgeMeshes=%d trains=%d"),
+	UE_LOG(LogTemp, Display, TEXT("SolCity perimeter railway: segments=%d trackMeshes=%d bridgeMeshes=%d consists=%d trainCars=%d"),
 		RailwaySegments.Num(),
 		RailwayTrackInstances ? RailwayTrackInstances->GetInstanceCount() : 0,
 		RailwayBridgeInstances ? RailwayBridgeInstances->GetInstanceCount() : 0,
+		RailwayTrainInstanceIndices.IsEmpty() ? 0 : 2,
 		RailwayTrainInstances ? RailwayTrainInstances->GetInstanceCount() : 0);
 	bHasGenerated = true;
 }
@@ -1253,6 +1268,13 @@ void ASolCityGenerator::GenerateRailway()
 	const FVector FirstLoopPoint = LoopPoints[0];
 	LoopPoints.Add(FirstLoopPoint);
 	RailwayPathWaypoints = LoopPoints;
+	RailwayPathCumulativeDistances.SetNumZeroed(LoopPoints.Num());
+	for (int32 Index = 1; Index < LoopPoints.Num(); ++Index)
+	{
+		RailwayPathCumulativeDistances[Index] = RailwayPathCumulativeDistances[Index - 1] +
+			FVector::Distance(LoopPoints[Index - 1], LoopPoints[Index]);
+	}
+	RailwayLoopLength = RailwayPathCumulativeDistances.Last();
 
 	for (int32 Index = 1; Index < LoopPoints.Num(); ++Index)
 	{
@@ -1263,24 +1285,140 @@ void ASolCityGenerator::GenerateRailway()
 
 	if (RailwayTrainInstances && RailwayTrainMesh)
 	{
-		const FBox TrainBounds = RailwayTrainMesh->GetBoundingBox();
-		const FVector TrainSize = TrainBounds.GetSize();
-		for (const int32 SegmentIndex : {SegmentCount / 4, SegmentCount * 3 / 4})
+		constexpr int32 ConsistCount = 2;
+		const int32 CarCount = FMath::Clamp(RailwayCarsPerConsist, 1, 8);
+		RailwayTrainInstanceIndices.Reserve(ConsistCount * CarCount);
+		for (int32 ConsistIndex = 0; ConsistIndex < ConsistCount; ++ConsistIndex)
 		{
-			const FVector Start = LoopPoints[SegmentIndex];
-			const FVector End = LoopPoints[SegmentIndex + 1];
-			FVector Direction = (End - Start).GetSafeNormal();
-			Direction.Z = 0.0f;
-			Direction.Normalize();
-			const float TrackSide = SegmentIndex == SegmentCount / 4 ? -1.0f : 1.0f;
-			const FVector TrackOffset(-Direction.Y * 215.0f * TrackSide, Direction.X * 215.0f * TrackSide, 0.0f);
-			const FVector Midpoint = (Start + End) * 0.5f + TrackOffset;
-			const FRotator Rotation = FRotationMatrix::MakeFromX(Direction).Rotator();
-			const FVector DesiredCenter(Midpoint.X, Midpoint.Y, Midpoint.Z + TrainSize.Z * 0.5f);
-			const FVector Translation = DesiredCenter - Rotation.RotateVector(TrainBounds.GetCenter());
-			RailwayTrainInstances->AddInstance(FTransform(Rotation, Translation, FVector::OneVector));
+			for (int32 CarIndex = 0; CarIndex < CarCount; ++CarIndex)
+			{
+				RailwayTrainInstanceIndices.Add(RailwayTrainInstances->AddInstance(FTransform::Identity));
+			}
+		}
+		UpdateRailwayTrains(0.0f);
+	}
+}
+
+bool ASolCityGenerator::SampleRailwayPath(const float Distance, FVector& OutPosition, FVector& OutTangent) const
+{
+	if (RailwayLoopLength <= KINDA_SMALL_NUMBER || RailwayPathWaypoints.Num() < 2 ||
+		RailwayPathCumulativeDistances.Num() != RailwayPathWaypoints.Num())
+	{
+		return false;
+	}
+
+	auto SamplePosition = [this](const float SampleDistance, FVector& Position)
+	{
+		float WrappedDistance = FMath::Fmod(SampleDistance, RailwayLoopLength);
+		if (WrappedDistance < 0.0f)
+		{
+			WrappedDistance += RailwayLoopLength;
+		}
+
+		int32 SegmentEndIndex = 1;
+		while (SegmentEndIndex < RailwayPathCumulativeDistances.Num() - 1 &&
+			RailwayPathCumulativeDistances[SegmentEndIndex] < WrappedDistance)
+		{
+			++SegmentEndIndex;
+		}
+
+		const int32 SegmentStartIndex = SegmentEndIndex - 1;
+		const float SegmentStartDistance = RailwayPathCumulativeDistances[SegmentStartIndex];
+		const float SegmentLength = RailwayPathCumulativeDistances[SegmentEndIndex] - SegmentStartDistance;
+		if (SegmentLength <= KINDA_SMALL_NUMBER)
+		{
+			return false;
+		}
+
+		const float Alpha = FMath::Clamp((WrappedDistance - SegmentStartDistance) / SegmentLength, 0.0f, 1.0f);
+		Position = FMath::Lerp(
+			RailwayPathWaypoints[SegmentStartIndex],
+			RailwayPathWaypoints[SegmentEndIndex],
+			Alpha);
+		return true;
+	};
+
+	if (!SamplePosition(Distance, OutPosition))
+	{
+		return false;
+	}
+
+	// A single polyline segment changes tangent discontinuously at every waypoint.
+	// Use a centered chord roughly one track segment long on either side so yaw,
+	// pitch, and the lateral track offset remain continuous through corners and
+	// across the loop seam.
+	const int32 SegmentCount = RailwayPathWaypoints.Num() - 1;
+	const float TangentSampleDistance = FMath::Max(1.0f, RailwayLoopLength / SegmentCount);
+	FVector PositionBefore;
+	FVector PositionAfter;
+	if (!SamplePosition(Distance - TangentSampleDistance, PositionBefore) ||
+		!SamplePosition(Distance + TangentSampleDistance, PositionAfter))
+	{
+		return false;
+	}
+
+	OutTangent = (PositionAfter - PositionBefore).GetSafeNormal();
+	return !OutTangent.IsNearlyZero();
+}
+
+void ASolCityGenerator::UpdateRailwayTrains(const float DeltaSeconds)
+{
+	if (!RailwayTrainInstances || !RailwayTrainMesh || RailwayLoopLength <= KINDA_SMALL_NUMBER)
+	{
+		return;
+	}
+
+	constexpr int32 ConsistCount = 2;
+	constexpr float TrackCenterOffset = 215.0f;
+	const int32 CarCount = FMath::Clamp(RailwayCarsPerConsist, 1, 8);
+	if (RailwayTrainInstanceIndices.Num() != ConsistCount * CarCount)
+	{
+		return;
+	}
+
+	RailwayTrainTravelDistance = FMath::Fmod(
+		RailwayTrainTravelDistance + FMath::Max(0.0f, RailwayTrainSpeed) * FMath::Max(0.0f, DeltaSeconds),
+		RailwayLoopLength);
+	const FBox TrainBounds = RailwayTrainMesh->GetBoundingBox();
+	const float CarSpacing = TrainBounds.GetSize().X + FMath::Max(0.0f, RailwayCarGap);
+	const FVector LocalWheelReference(TrainBounds.GetCenter().X, TrainBounds.GetCenter().Y, TrainBounds.Min.Z);
+
+	for (int32 ConsistIndex = 0; ConsistIndex < ConsistCount; ++ConsistIndex)
+	{
+		const float DirectionSign = ConsistIndex == 0 ? 1.0f : -1.0f;
+		const float InitialPhase = RailwayLoopLength * (ConsistIndex == 0 ? 0.12f : 0.62f);
+		const float HeadDistance = InitialPhase + DirectionSign * RailwayTrainTravelDistance;
+		const float TrackSide = ConsistIndex == 0 ? 1.0f : -1.0f;
+
+		for (int32 CarIndex = 0; CarIndex < CarCount; ++CarIndex)
+		{
+			const float CarDistance = HeadDistance - DirectionSign * CarIndex * CarSpacing;
+			FVector Position;
+			FVector CanonicalTangent;
+			if (!SampleRailwayPath(CarDistance, Position, CanonicalTangent))
+			{
+				continue;
+			}
+
+			FVector HorizontalTangent(CanonicalTangent.X, CanonicalTangent.Y, 0.0f);
+			HorizontalTangent.Normalize();
+			const FVector TrackNormal(-HorizontalTangent.Y, HorizontalTangent.X, 0.0f);
+			Position += TrackNormal * TrackCenterOffset * TrackSide;
+			const FVector TravelTangent = CanonicalTangent * DirectionSign;
+			// Keep world up stable on bridge approaches and retain quaternion rotation
+			// through the +/-180 degree yaw seam instead of rebuilding Euler angles.
+			const FQuat Rotation = FRotationMatrix::MakeFromXZ(TravelTangent, FVector::UpVector).ToQuat();
+			const FVector Translation = Position - Rotation.RotateVector(LocalWheelReference);
+			const int32 FlatIndex = ConsistIndex * CarCount + CarIndex;
+			RailwayTrainInstances->UpdateInstanceTransform(
+				RailwayTrainInstanceIndices[FlatIndex],
+				FTransform(Rotation, Translation, FVector::OneVector),
+				false,
+				false,
+				true);
 		}
 	}
+	RailwayTrainInstances->MarkRenderStateDirty();
 }
 
 void ASolCityGenerator::GenerateDistrictSurfaces()
@@ -1383,6 +1521,45 @@ bool ASolCityGenerator::IsNearRailway(const FVector2D& Point, const float MaxDis
 	return false;
 }
 
+bool ASolCityGenerator::IsRectangleClearOfRailway(
+	const FVector2D& Center,
+	const FVector2D& LocalSize,
+	const float YawDegrees,
+	const float Clearance) const
+{
+	const FVector2D HalfSize = LocalSize.GetAbs() * 0.5f;
+	const float YawRadians = FMath::DegreesToRadians(YawDegrees);
+	const FVector2D LocalX(FMath::Cos(YawRadians), FMath::Sin(YawRadians));
+	const FVector2D LocalY(-LocalX.Y, LocalX.X);
+
+	for (const FRailwaySegment& Segment : RailwaySegments)
+	{
+		const FVector2D Start(Segment.Start.X, Segment.Start.Y);
+		const FVector2D End(Segment.End.X, Segment.End.Y);
+		const FVector2D AlongRail = End - Start;
+		const float LengthSquared = AlongRail.SizeSquared();
+		if (LengthSquared <= KINDA_SMALL_NUMBER)
+		{
+			continue;
+		}
+
+		const float T = FMath::Clamp(FVector2D::DotProduct(Center - Start, AlongRail) / LengthSquared, 0.0f, 1.0f);
+		const FVector2D Separation = Center - (Start + AlongRail * T);
+		const float Distance = Separation.Size();
+		const FVector2D RailNormal = Distance > KINDA_SMALL_NUMBER
+			? Separation / Distance
+			: FVector2D(-AlongRail.Y, AlongRail.X).GetSafeNormal();
+		const float ProjectedRadius =
+			FMath::Abs(FVector2D::DotProduct(LocalX, RailNormal)) * HalfSize.X +
+			FMath::Abs(FVector2D::DotProduct(LocalY, RailNormal)) * HalfSize.Y;
+		if (Distance < Segment.HalfWidth + FMath::Max(0.0f, Clearance) + ProjectedRadius)
+		{
+			return false;
+		}
+	}
+	return true;
+}
+
 bool ASolCityGenerator::IsBuildingSiteFree(const FVector2D& Center, const FVector2D& Extent) const
 {
 	const float HalfCity = CityDiameter * 0.5f - SolCityGeneration::BuildingEdgeMargin;
@@ -1434,31 +1611,7 @@ bool ASolCityGenerator::IsBuildingClearOfRoads(const FVector2D& Center, const FV
 			return false;
 		}
 	}
-	for (const FRailwaySegment& Segment : RailwaySegments)
-	{
-		const FVector2D Start(Segment.Start.X, Segment.Start.Y);
-		const FVector2D End(Segment.End.X, Segment.End.Y);
-		const FVector2D AlongRail = End - Start;
-		const float LengthSquared = AlongRail.SizeSquared();
-		if (LengthSquared <= KINDA_SMALL_NUMBER)
-		{
-			continue;
-		}
-		const float T = FMath::Clamp(FVector2D::DotProduct(Center - Start, AlongRail) / LengthSquared, 0.0f, 1.0f);
-		const FVector2D Separation = Center - (Start + AlongRail * T);
-		const float Distance = Separation.Size();
-		const FVector2D RailNormal = Distance > KINDA_SMALL_NUMBER
-			? Separation / Distance
-			: FVector2D(-AlongRail.Y, AlongRail.X).GetSafeNormal();
-		const float ProjectedBuildingRadius =
-			FMath::Abs(FVector2D::DotProduct(LocalX, RailNormal)) * HalfSize.X +
-			FMath::Abs(FVector2D::DotProduct(LocalY, RailNormal)) * HalfSize.Y;
-		if (Distance < Segment.HalfWidth + 260.0f + ProjectedBuildingRadius)
-		{
-			return false;
-		}
-	}
-	return true;
+	return IsRectangleClearOfRailway(Center, LocalSize, YawDegrees, 260.0f);
 }
 
 void ASolCityGenerator::GenerateBuildings()
@@ -1553,10 +1706,17 @@ void ASolCityGenerator::GenerateBuildings()
 		Reserved.Center = Rect.Center;
 		Reserved.Extent = SolCityGeneration::RotatedExtent2D(Rect.Size, Rect.Yaw);
 	};
-	auto AddGroundedProp = [](UHierarchicalInstancedStaticMeshComponent* Group, const FVector2D& Position, float Yaw)
+	auto AddGroundedProp = [this](UHierarchicalInstancedStaticMeshComponent* Group, const FVector2D& Position, float Yaw)
 	{
 		if (Group)
 		{
+			const UStaticMesh* Mesh = Group->GetStaticMesh();
+			const FVector MeshSize = Mesh ? Mesh->GetBoundingBox().GetSize() : FVector::ZeroVector;
+			const FVector2D PropSize(FMath::Max(1.0f, MeshSize.X), FMath::Max(1.0f, MeshSize.Y));
+			if (!IsRectangleClearOfRailway(Position, PropSize, Yaw, 180.0f))
+			{
+				return;
+			}
 			Group->AddInstance(FTransform(FRotator(0.0f, Yaw, 0.0f), FVector(Position.X, Position.Y, 16.0f), FVector::OneVector));
 		}
 	};
@@ -1608,7 +1768,8 @@ void ASolCityGenerator::GenerateBuildings()
 			continue;
 		}
 		const FOpenSpaceRect Rect = FindOpenSpaceRect(Block);
-		if (!Rect.bValid || Rect.Size.GetMin() < 650.0f)
+		if (!Rect.bValid || Rect.Size.GetMin() < 650.0f ||
+			!IsRectangleClearOfRailway(Rect.Center, Rect.Size, Rect.Yaw, 180.0f))
 		{
 			continue;
 		}
@@ -1996,6 +2157,7 @@ void ASolCityGenerator::GenerateBuildings()
 				const FVector2D PathExtent = SolCityGeneration::RotatedExtent2D(PathSize + FVector2D(120.0f, 80.0f), PathYaw);
 				if (!RectangleInsideBlock(Block, PathCenter, PathSize, PathYaw) ||
 					!IsBuildingSiteFree(PathCenter, PathExtent) ||
+					!IsRectangleClearOfRailway(PathCenter, PathSize, PathYaw, 180.0f) ||
 					IsInsideRiver(PathStart, 220.0f) || IsInsideRiver(PathCenter, 220.0f) ||
 					IsInsideRiver(PathStart + Inward * PathLength, 220.0f))
 				{
@@ -2662,7 +2824,7 @@ void ASolCityGenerator::GenerateTrees()
 		}
 		const float MinimumRoadDistance = bOuterNeighborhood ? 300.0f : 420.0f;
 		const float MaximumRoadDistance = bOuterNeighborhood ? 1120.0f : 900.0f;
-		if (IsInsideRiver(Candidate, 520.0f) || IsNearRailway(Candidate, 360.0f) ||
+		if (IsInsideRiver(Candidate, 520.0f) ||
 			!IsNearRoad(Candidate, MaximumRoadDistance) || IsNearRoad(Candidate, MinimumRoadDistance))
 		{
 			continue;
@@ -2714,6 +2876,14 @@ void ASolCityGenerator::GenerateTrees()
 			? Random.FRandRange(0.72f, 1.12f)
 			: Random.FRandRange(0.82f, 1.18f);
 		const FRotator Rotation(0.0f, Random.FRandRange(-180.0f, 180.0f), 0.0f);
+		if (!IsRectangleClearOfRailway(
+			Candidate,
+			FVector2D(Bounds.GetSize().X, Bounds.GetSize().Y) * UniformScale,
+			Rotation.Yaw,
+			180.0f))
+		{
+			continue;
+		}
 		const FVector Scale(UniformScale);
 		const FVector DesiredCenter(Candidate.X, Candidate.Y, Bounds.GetSize().Z * UniformScale * 0.5f);
 		SelectedGroup->AddInstance(FTransform(Rotation, DesiredCenter - Rotation.RotateVector(Bounds.GetCenter() * Scale), Scale));
@@ -2803,6 +2973,11 @@ void ASolCityGenerator::GenerateTrafficFurniture()
 			const float XSign = (Corner & 1) ? 1.0f : -1.0f;
 			const float YSign = (Corner & 2) ? 1.0f : -1.0f;
 			const FVector PoleBase = Center + FVector(XSign * 470.0f, YSign * 470.0f, 0.0f);
+			if (!IsRectangleClearOfRailway(
+				FVector2D(PoleBase.X, PoleBase.Y), FVector2D(90.0f, 70.0f), Corner * 90.0f, 180.0f))
+			{
+				continue;
+			}
 			AddCylinder(CylinderInstances, PoleBase + FVector(0.0f, 0.0f, 190.0f), 20.0f, 380.0f);
 			AddBox(DetailInstances, PoleBase + FVector(0.0f, 0.0f, 390.0f), FVector(90.0f, 70.0f, 190.0f), Corner * 90.0f);
 		}
@@ -2841,7 +3016,9 @@ void ASolCityGenerator::GenerateTrafficFurniture()
 			const float Yaw = BaseYaw + (Side < 0.0f ? 180.0f : 0.0f);
 			const FVector2D Extent = SolCityGeneration::RotatedExtent2D(
 				FVector2D(650.0f, 180.0f) * BillboardDisplayScale, Yaw);
-			if (IsInsideRiver(Candidate, 250.0f) || !IsBuildingSiteFree(Candidate, Extent))
+			if (IsInsideRiver(Candidate, 250.0f) || !IsBuildingSiteFree(Candidate, Extent) ||
+				!IsRectangleClearOfRailway(
+					Candidate, FVector2D(650.0f, 180.0f) * BillboardDisplayScale, Yaw, 180.0f))
 			{
 				continue;
 			}

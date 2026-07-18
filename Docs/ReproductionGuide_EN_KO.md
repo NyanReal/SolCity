@@ -28,7 +28,7 @@ The generated result includes:
 - An irregular hierarchy of 1-lane local roads, 2-lane collectors, and 4-lane arterials/bridges.
 - Separate raised sidewalks and 20 cm curbs, with curb and sidewalk intervals removed inside intersections.
 - A continuous river ribbon with retaining walls, riverside walks, railings, green banks, and bridge transitions.
-- A double-track perimeter railway with two river crossings, truss rail bridges, and two visible commuter trains.
+- A double-track perimeter railway with two river crossings, truss rail bridges, and two moving four-car commuter consists.
 - Continuous district underlays plus slightly overlapping zoning tiles, eliminating the old dark grid gaps between grass cells.
 - Road-derived city blocks and parcels rather than point-only building scatter.
 - Pedestrian-only interior mews that fill eligible oversized outer blocks with inward-facing low-rise homes.
@@ -40,11 +40,12 @@ The generated result includes:
 The validated default-seed runtime snapshot from 2026-07-19 is:
 
 ```text
-blocks=113 buildings=1500/1500 parks=8 parking=9 courtyards=9
-tapered=180 twinSkybridge=4 megaCBD=5 outerLowRise=738
-authored suburban=184 authored megaCBD=4
-billboards=48 skybridges=6
-trees=1055 conifers=545 curbs=1366
+blocks=113 buildings=1500/1500 parks=8 parking=9 courtyards=9 interiorMews=16 interiorHomes=78
+tapered=203 twinSkybridge=4 megaCBD=5 outerLowRise=757
+authored suburban=244 authored megaCBD=4
+billboards=48 skybridges=7
+trees=1073 conifers=527 curbs=1366
+railway segments=352 trackMeshes=342 bridgeMeshes=10 consists=2 trainCars=8
 ```
 
 Counts can change when the seed, target count, city diameter, or available assets change. The invariants are successful target completion, four authored mega-CBD landmarks when their assets are available, visible skybridges, four billboard material variants, a closed perimeter railway with both river crossings bridged, and no HISM material-usage errors.
@@ -125,7 +126,7 @@ Current expansion kits:
 | `SM_SolCity_VoxelCat_01` | one mesh | `1.250 x 1.896 x 1.198 m` |
 | `SM_SolCity_DoubleTrack_01` | one double-track module | `12.000 x 8.250 x 0.590 m` |
 | `SM_SolCity_RailBridge_01` | one double-track truss module | `12.000 x 9.100 x 6.330 m` |
-| `SM_SolCity_CommuterTrain_01` | one commuter train | `34.190 x 3.430 x 5.360 m` |
+| `SM_SolCity_CommuterTrain_01` | one reusable commuter car | `34.190 x 3.430 x 5.360 m` |
 | `SM_SolCity_MegaSkyscrapers_01` | `SM_SolCity_MegaGlassCurtainwall_01` | `48.000 x 42.425 x 225.000 m` |
 |  | `SM_SolCity_MegaNewYorkSetback_01` | `52.000 x 44.700 x 228.500 m` |
 |  | `SM_SolCity_MegaGeometricTwist_01` | `49.889 x 52.336 x 223.500 m` |
@@ -217,7 +218,7 @@ The zoning system creates continuous residential underlays first, then residenti
 
 Before ordinary frontage placement, eligible oversized outer blocks receive a 150 cm pedestrian mews from an existing roadside sidewalk into the block. One-story homes are tested on both sides with their authored `-Y` entrance facing the mews. Polygon corners, river samples, roads, railway, existing occupancy, and candidate OBB overlaps are rejected. The path, entrance spurs, pedestrian waypoint pair, and reserved corridor are committed only when at least two homes place successfully.
 
-The railway is a deterministic closed ellipse inside the city edge. Segment count follows circumference and is clamped to `96..520`. Both crossings of the meandering river use the truss bridge mesh at a `420 cm` running surface, with smooth `1,900 cm` approaches down to the `59 cm` ground-running surface. Two commuter trains occupy opposite tracks, buildings use the railway segments as clearance geometry, trees reject nearby candidates, and `GetRailwayPathWaypoints()` exposes the closed route.
+The railway is a deterministic closed ellipse inside the city edge. Segment count follows circumference and is clamped to `96..520`. Both crossings of the meandering river use the truss bridge mesh at a `420 cm` running surface, with smooth `1,900 cm` approaches down to the `59 cm` ground-running surface. Two four-car consists run in opposite directions on opposite tracks. Every car samples its own cumulative route distance, so the cars keep the authored length plus an `80 cm` coupler gap and align independently to curves and bridge grades. Default speed is `1,800 cm/s` (`64.8 km/h`). Buildings use the railway segments as clearance geometry, trees reject nearby candidates, and `GetRailwayPathWaypoints()` exposes the closed route.
 
 Procedural building styles are:
 
@@ -255,7 +256,7 @@ Camera defaults:
 | Free-flight speed range | `500..30,000 cm/s` |
 | Free-flight pitch | `-89..89 degrees` |
 
-Use `W A S D` to pan, RMB drag to rotate/change pitch, the wheel to zoom, and `F` to toggle free flight. In free flight use `Q/E` for down/up and the wheel to change speed. Returning from free flight restores the saved city transform, arm rotation, current arm length, and desired zoom.
+Use `W A S D` to pan, RMB drag to rotate/change pitch, the wheel to zoom, and `F` to toggle free flight. `T` toggles railway time: the two train consists pause in place and resume from the same cumulative route distance while water, road traffic, and the rest of the city continue. In free flight use `Q/E` for down/up and the wheel to change speed. Returning from free flight restores the saved city transform, arm rotation, current arm length, and desired zoom.
 
 The runtime creates or reuses Sky Atmosphere, directional sun, Sky Light, Exponential Height Fog, Volumetric Cloud, and an unbound Post Process Volume. It uses manual exposure, AO `0.45`, AO radius `120`, AO power `1.2`, saturation `0.97`, contrast `1.02`, bloom `0.25`, and bloom threshold `1.4`. A large collisionless, shadowless plane at `Z = -280 cm` hides the finite-world edge behind height fog.
 
@@ -299,7 +300,7 @@ Visual PIE verification:
 - Billboards face the road and visibly rotate four non-verbal ads.
 - Conifers are mixed among broadleaf trees.
 - The voxel cat has visible eyes, ears, muzzle, whiskers, paws, and segmented tail and follows sidewalk direction.
-- The perimeter double track is closed, both river crossings use rail bridges, approaches are continuous, and two commuter trains sit on opposite tracks.
+- The perimeter double track is closed, both river crossings use rail bridges, approaches are continuous, and two four-car commuter consists move in opposite directions on opposite tracks.
 - Oversized outer blocks that receive interior homes also receive a narrow pedestrian mews, and the house entrances face it.
 - Every tapered upper module is contained by the actual supporting module bounds, not only by its requested parcel rectangle.
 - River water, green bank, retaining wall, promenade, rail, bridge, and concrete transitions do not leave open gaps.
@@ -330,7 +331,7 @@ For each regenerated Blender asset, also inspect its `_preview.png` and repeat t
 - 1차로 골목길, 2차로 집산도로, 4차로 간선도로와 교량으로 구성된 비정형 도로 계층.
 - 차도보다 높은 별도 인도와 20cm 경석. 교차로 내부에는 경석과 인도를 생성하지 않는다.
 - 하나로 이어진 강, 옹벽, 강변 산책로, 난간, 녹지 둔치와 교량 진입부.
-- 도시 외곽을 닫힌 경로로 순환하는 복선 철도, 강을 두 번 건너는 트러스 철교와 통근열차 2편.
+- 도시 외곽을 닫힌 경로로 순환하는 복선 철도, 강을 두 번 건너는 트러스 철교와 운행하는 4량 통근열차 편성 2개.
 - 연속 지면 받침과 서로 약간 겹치는 용도지역 셀. 예전 녹지 격자 틈은 제거됐다.
 - 포인트 산포가 아니라 도로에서 추출한 도시 블록과 대지 필지에 따른 건물 배치.
 - 큰 외곽 블록 내부를 보행 전용 좁은 길과 길을 향한 저층 주택으로 채우는 mews 배치.
@@ -342,11 +343,12 @@ For each regenerated Blender asset, also inspect its `_preview.png` and repeat t
 2026-07-19 기본 시드 검증 결과는 다음과 같다.
 
 ```text
-blocks=113 buildings=1500/1500 parks=8 parking=9 courtyards=9
-tapered=180 twinSkybridge=4 megaCBD=5 outerLowRise=738
-authored suburban=184 authored megaCBD=4
-billboards=48 skybridges=6
-trees=1055 conifers=545 curbs=1366
+blocks=113 buildings=1500/1500 parks=8 parking=9 courtyards=9 interiorMews=16 interiorHomes=78
+tapered=203 twinSkybridge=4 megaCBD=5 outerLowRise=757
+authored suburban=244 authored megaCBD=4
+billboards=48 skybridges=7
+trees=1073 conifers=527 curbs=1366
+railway segments=352 trackMeshes=342 bridgeMeshes=10 consists=2 trainCars=8
 ```
 
 시드, 목표 건물 수, 도시 크기나 로드 가능한 에셋이 바뀌면 정확한 수치는 달라질 수 있다. 목표 건물 수 달성, authored 초대형 CBD 4종, 보이는 공중 연결부, 광고 재질 4종, 강 양쪽 횡단부에 철교가 있는 닫힌 외곽 순환 철도와 HISM 재질 오류 0건을 핵심 불변 조건으로 본다.
@@ -427,7 +429,7 @@ SM_SolCity_<Name>_01_preview.png
 | `SM_SolCity_VoxelCat_01` | 단일 메시 | `1.250 x 1.896 x 1.198 m` |
 | `SM_SolCity_DoubleTrack_01` | 복선 모듈 1개 | `12.000 x 8.250 x 0.590 m` |
 | `SM_SolCity_RailBridge_01` | 복선 트러스 철교 모듈 1개 | `12.000 x 9.100 x 6.330 m` |
-| `SM_SolCity_CommuterTrain_01` | 통근열차 1편 | `34.190 x 3.430 x 5.360 m` |
+| `SM_SolCity_CommuterTrain_01` | 재사용 통근열차 차량 1량 | `34.190 x 3.430 x 5.360 m` |
 | `SM_SolCity_MegaSkyscrapers_01` | `SM_SolCity_MegaGlassCurtainwall_01` | `48.000 x 42.425 x 225.000 m` |
 |  | `SM_SolCity_MegaNewYorkSetback_01` | `52.000 x 44.700 x 228.500 m` |
 |  | `SM_SolCity_MegaGeometricTwist_01` | `49.889 x 52.336 x 223.500 m` |
@@ -519,7 +521,7 @@ unreal.SolCityLandscapeLibrary.rebuild_sol_city_landscape(144000.0, 6000.0, -90.
 
 일반 도로 전면 배치 전에 조건을 만족하는 큰 외곽 블록에는 기존 도로 인도에서 블록 내부로 들어가는 폭 150cm의 보행 전용 mews를 만든다. 양쪽 단층 주택은 authored `-Y` 출입구가 mews를 향하도록 배치한다. 블록 모서리, 강의 시작·중앙·끝 표본, 도로, 철도, 기존 점유와 후보 OBB 충돌을 검사한다. 주택이 최소 2채 이상 성공한 경우에만 본선·현관 연결 보도, 보행 웨이포인트 쌍과 예약 회랑을 확정한다.
 
-철도는 도시 경계 안쪽의 결정적인 닫힌 타원 경로다. 선분 수는 둘레에 비례하며 `96..520` 범위다. 굽은 강을 지나는 두 횡단부는 주행면 `420 cm`의 트러스 철교를 사용하고, 길이 `1,900 cm`의 완만한 진입 경사로 지상 주행면 `59 cm`에 연결한다. 통근열차 2편은 서로 반대편 선로에 놓인다. 건물은 철도 선분을 이격 형상으로 사용하고 나무도 철도 주변 후보를 거부한다. 닫힌 경로는 `GetRailwayPathWaypoints()`로 제공한다.
+철도는 도시 경계 안쪽의 결정적인 닫힌 타원 경로다. 선분 수는 둘레에 비례하며 `96..520` 범위다. 굽은 강을 지나는 두 횡단부는 주행면 `420 cm`의 트러스 철교를 사용하고, 길이 `1,900 cm`의 완만한 진입 경사로 지상 주행면 `59 cm`에 연결한다. 4량 편성 2개가 서로 반대 선로에서 반대 방향으로 운행한다. 각 차량은 루프 누적 거리를 별도로 샘플링하므로 authored 차량 길이에 `80 cm` 연결 간격을 더한 간격을 유지하면서 곡선과 철교 경사에 개별 정렬된다. 기본 속도는 `1,800 cm/s`(`64.8 km/h`)다. 건물은 철도 선분을 이격 형상으로 사용하고 나무도 철도 주변 후보를 거부한다. 닫힌 경로는 `GetRailwayPathWaypoints()`로 제공한다.
 
 절차형 건물 스타일은 다음과 같다.
 
@@ -557,7 +559,7 @@ unreal.SolCityLandscapeLibrary.rebuild_sol_city_landscape(144000.0, 6000.0, -90.
 | 자유 비행 속도 범위 | `500..30,000 cm/s` |
 | 자유 비행 피치 | `-89..89도` |
 
-`W A S D`로 화면 이동, RMB 드래그로 회전과 피치 변경, 휠로 줌, `F`로 자유 비행을 전환한다. 자유 비행에서는 `Q/E`로 하강·상승하고 휠로 속도를 바꾼다. 자유 비행을 끝내면 저장한 도시 Transform, 스프링암 회전, 현재 길이와 목표 줌을 복원한다.
+`W A S D`로 화면 이동, RMB 드래그로 회전과 피치 변경, 휠로 줌, `F`로 자유 비행을 전환한다. `T`는 철도 시간 토글이다. 두 열차 편성은 현재 누적 경로 거리에서 정지하고 다시 `T`를 누르면 그 위치에서 운행을 재개하며, 물·도로 교통과 나머지 도시는 계속 움직인다. 자유 비행에서는 `Q/E`로 하강·상승하고 휠로 속도를 바꾼다. 자유 비행을 끝내면 저장한 도시 Transform, 스프링암 회전, 현재 길이와 목표 줌을 복원한다.
 
 런타임은 Sky Atmosphere, 방향광, Sky Light, Exponential Height Fog, Volumetric Cloud와 무한 Post Process Volume을 생성하거나 기존 액터를 재사용한다. 수동 노출, AO `0.45`, AO 반경 `120`, AO Power `1.2`, 채도 `0.97`, 대비 `1.02`, Bloom `0.25`, Bloom Threshold `1.4`를 사용한다. `Z = -280 cm`의 매우 큰 충돌·그림자 없는 평면과 높이 안개로 유한 지형 밖 경계를 가린다.
 
@@ -601,7 +603,7 @@ PIE 시각 검증 항목:
 - 광고판이 도로를 향하고 언어 없는 광고 4종을 순환한다.
 - 활엽수 사이에 침엽수가 섞인다.
 - 복셀 고양이의 눈, 귀, 주둥이, 수염, 발과 마디형 꼬리가 보이며 인도 방향을 따라간다.
-- 외곽 복선 철도가 닫힌 경로이고 강을 건너는 두 곳 모두 철교이며, 진입 경사가 끊기지 않고 열차 2편이 서로 반대 선로에 있다.
+- 외곽 복선 철도가 닫힌 경로이고 강을 건너는 두 곳 모두 철교이며, 진입 경사가 끊기지 않고 4량 통근열차 편성 2개가 서로 반대 선로·반대 방향으로 움직인다.
 - 내부 주택이 생긴 큰 외곽 블록에는 좁은 보행 mews도 있고 주택 출입구가 그 길을 향한다.
 - 테이퍼 상층 모듈이 요청 필지 사각형뿐 아니라 실제 하층 모듈 지지 범위 안에도 들어간다.
 - 강물, 녹지 둔치, 옹벽, 산책로, 난간, 교량과 콘크리트 전환부 사이에 열린 틈이 없다.

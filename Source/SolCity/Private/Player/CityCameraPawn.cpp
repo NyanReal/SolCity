@@ -1,7 +1,9 @@
 #include "Player/CityCameraPawn.h"
 
 #include "Camera/CameraComponent.h"
+#include "City/SolCityGenerator.h"
 #include "Components/InputComponent.h"
+#include "EngineUtils.h"
 #include "GameFramework/FloatingPawnMovement.h"
 #include "GameFramework/PlayerController.h"
 #include "GameFramework/SpringArmComponent.h"
@@ -85,6 +87,7 @@ void ACityCameraPawn::SetupPlayerInputComponent(UInputComponent* PlayerInputComp
     PlayerInputComponent->BindAction(TEXT("RotateDrag"), IE_Pressed, this, &ACityCameraPawn::SetRotateDragPressed);
     PlayerInputComponent->BindAction(TEXT("RotateDrag"), IE_Released, this, &ACityCameraPawn::SetRotateDragReleased);
     PlayerInputComponent->BindAction(TEXT("ToggleFreeFly"), IE_Pressed, this, &ACityCameraPawn::ToggleFreeFly);
+    PlayerInputComponent->BindAction(TEXT("ToggleTrainTime"), IE_Pressed, this, &ACityCameraPawn::ToggleTrainTime);
 }
 
 void ACityCameraPawn::ZoomIn() { Zoom(1.0f); }
@@ -167,6 +170,25 @@ void ACityCameraPawn::ToggleFreeFly()
     Movement->MaxSpeed = PanSpeed;
     bFreeFlyMode = false;
     UE_LOG(LogTemp, Log, TEXT("SolCity camera mode: City"));
+}
+
+void ACityCameraPawn::ToggleTrainTime()
+{
+    UWorld* World = GetWorld();
+    if (!World)
+    {
+        return;
+    }
+
+    for (TActorIterator<ASolCityGenerator> It(World); It; ++It)
+    {
+        if (ASolCityGenerator* Generator = *It)
+        {
+            Generator->ToggleRailwayTimePaused();
+            return;
+        }
+    }
+    UE_LOG(LogTemp, Warning, TEXT("SolCity railway time toggle: no city generator found"));
 }
 
 void ACityCameraPawn::SetRotateDragPressed() { bRotateDragging = true; }

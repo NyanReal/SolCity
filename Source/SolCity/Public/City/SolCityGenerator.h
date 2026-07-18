@@ -78,6 +78,12 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Sol City|Railway")
 	TArray<FVector> GetRailwayPathWaypoints() const { return RailwayPathWaypoints; }
 
+	UFUNCTION(BlueprintCallable, Category = "Sol City|Railway")
+	void ToggleRailwayTimePaused();
+
+	UFUNCTION(BlueprintPure, Category = "Sol City|Railway")
+	bool IsRailwayTimePaused() const { return bRailwayTimePaused; }
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sol City|Generation")
 	int32 Seed = 71527;
 
@@ -218,6 +224,18 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sol City|Railway")
 	TObjectPtr<UStaticMesh> RailwayTrainMesh;
+
+	/** Speed of each four-car commuter consist along the closed railway loop. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sol City|Railway", meta = (ClampMin = "0.0", ClampMax = "5000.0", UIMin = "0.0", UIMax = "3000.0"))
+	float RailwayTrainSpeed = 1800.0f;
+
+	/** Number of connected cars in each of the two counter-running consists. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sol City|Railway", meta = (ClampMin = "1", ClampMax = "8"))
+	int32 RailwayCarsPerConsist = 4;
+
+	/** Small coupler gap measured between consecutive authored car bounds. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sol City|Railway", meta = (ClampMin = "0.0", ClampMax = "300.0"))
+	float RailwayCarGap = 80.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sol City|Foliage")
 	TObjectPtr<UStaticMesh> AuthoredTreeMesh;
@@ -364,9 +382,14 @@ private:
 
 	TArray<FBuildingFootprint> OccupiedBuildings;
 	TArray<FRailwaySegment> RailwaySegments;
+	TArray<float> RailwayPathCumulativeDistances;
+	TArray<int32> RailwayTrainInstanceIndices;
 	TArray<FVector2D> JunctionCapLocations;
 	FRandomStream Random;
 	float WaterTime = 0.0f;
+	float RailwayLoopLength = 0.0f;
+	float RailwayTrainTravelDistance = 0.0f;
+	bool bRailwayTimePaused = false;
 	bool bHasGenerated = false;
 
 	void ClearGeneratedComponents();
@@ -383,6 +406,8 @@ private:
 	void GenerateGroundAndRiver();
 	void GenerateRoadHierarchy();
 	void GenerateRailway();
+	void UpdateRailwayTrains(float DeltaSeconds);
+	bool SampleRailwayPath(float Distance, FVector& OutPosition, FVector& OutTangent) const;
 	void GenerateDistrictSurfaces();
 	void GenerateBuildings();
 	void GenerateTrees();
@@ -415,5 +440,6 @@ private:
 	bool IsBuildingClearOfRoads(const FVector2D& Center, const FVector2D& LocalSize, float YawDegrees) const;
 	bool IsNearRoad(const FVector2D& Point, float MaxDistance) const;
 	bool IsNearRailway(const FVector2D& Point, float MaxDistance) const;
+	bool IsRectangleClearOfRailway(const FVector2D& Center, const FVector2D& LocalSize, float YawDegrees, float Clearance) const;
 	float DistanceToSegment2D(const FVector2D& Point, const FVector2D& A, const FVector2D& B) const;
 };

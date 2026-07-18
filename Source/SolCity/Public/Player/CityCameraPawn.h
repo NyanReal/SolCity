@@ -32,6 +32,7 @@ private:
     void Rotate(float Value);
     void AdjustPitch(float Value);
     void ToggleFreeFly();
+    void ToggleTrainTime();
     void SetRotateDragPressed();
     void SetRotateDragReleased();
 
