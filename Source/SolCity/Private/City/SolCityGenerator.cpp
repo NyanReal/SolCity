@@ -5,6 +5,7 @@
 #include "Components/SceneComponent.h"
 #include "Components/SplineComponent.h"
 #include "Components/SplineMeshComponent.h"
+#include "Components/StaticMeshComponent.h"
 #include "Engine/CollisionProfile.h"
 #include "Engine/StaticMesh.h"
 #include "Materials/MaterialInstanceDynamic.h"
@@ -229,7 +230,7 @@ void ASolCityGenerator::RegenerateCity()
 	RailwaySegments.Reset();
 	RailwayCrossings.Reset();
 	RailwayPathCumulativeDistances.Reset();
-	RailwayTrainInstanceIndices.Reset();
+	RailwayTrainCars.Reset();
 	PedestrianWaypoints.Reset();
 	TrafficSignalLocations.Reset();
 	RailwayPathWaypoints.Reset();
@@ -317,8 +318,8 @@ void ASolCityGenerator::RegenerateCity()
 		RailwaySegments.Num(),
 		RailwayTrackInstances ? RailwayTrackInstances->GetInstanceCount() : 0,
 		RailwayBridgeInstances ? RailwayBridgeInstances->GetInstanceCount() : 0,
-		RailwayTrainInstanceIndices.IsEmpty() ? 0 : 2,
-		RailwayTrainInstances ? RailwayTrainInstances->GetInstanceCount() : 0);
+		RailwayTrainCars.IsEmpty() ? 0 : 2,
+		RailwayTrainCars.Num());
 	bHasGenerated = true;
 }
 
@@ -381,7 +382,7 @@ void ASolCityGenerator::ClearGeneratedComponents()
 	AuthoredBridgeInstances = nullptr;
 	RailwayTrackInstances = nullptr;
 	RailwayBridgeInstances = nullptr;
-	RailwayTrainInstances = nullptr;
+	RailwayTrainCars.Reset();
 	LevelCrossingBarrierBaseInstances = nullptr;
 	LevelCrossingBarrierBoomInstances = nullptr;
 	JunctionInstances = nullptr;
@@ -493,11 +494,6 @@ void ASolCityGenerator::CreateInstanceGroups()
 	if (RailwayBridgeMesh)
 	{
 		RailwayBridgeInstances = CreateInstanceGroup(TEXT("GeneratedRailwayTrussBridges"), RailwayBridgeMesh, nullptr, FLinearColor::White, true, false);
-	}
-	if (RailwayTrainMesh)
-	{
-		RailwayTrainInstances = CreateInstanceGroup(TEXT("GeneratedCommuterTrains"), RailwayTrainMesh, nullptr, FLinearColor::White, true, false);
-		RailwayTrainInstances->SetMobility(EComponentMobility::Movable);
 	}
 	if (LevelCrossingBarrierBaseMesh)
 	{
@@ -1317,16 +1313,27 @@ void ASolCityGenerator::GenerateRailway()
 		AddRailwaySegment(LoopPoints[Index - 1], LoopPoints[Index], DistanceFromRiver <= BridgeHalfSpan);
 	}
 
-	if (RailwayTrainInstances && RailwayTrainMesh)
+	if (RailwayTrainMesh)
 	{
 		constexpr int32 ConsistCount = 2;
 		const int32 CarCount = FMath::Clamp(RailwayCarsPerConsist, 1, 8);
-		RailwayTrainInstanceIndices.Reserve(ConsistCount * CarCount);
+		RailwayTrainCars.Reserve(ConsistCount * CarCount);
 		for (int32 ConsistIndex = 0; ConsistIndex < ConsistCount; ++ConsistIndex)
 		{
 			for (int32 CarIndex = 0; CarIndex < CarCount; ++CarIndex)
 			{
-				RailwayTrainInstanceIndices.Add(RailwayTrainInstances->AddInstance(FTransform::Identity));
+				const FName ComponentName(*FString::Printf(TEXT("GeneratedTrain_%d_Car_%d"), ConsistIndex + 1, CarIndex + 1));
+				UStaticMeshComponent* TrainCar = NewObject<UStaticMeshComponent>(this, ComponentName);
+				TrainCar->SetupAttachment(SceneRoot);
+				TrainCar->SetStaticMesh(RailwayTrainMesh);
+				TrainCar->SetMobility(EComponentMobility::Movable);
+				TrainCar->SetCanEverAffectNavigation(false);
+				TrainCar->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+				TrainCar->SetCollisionProfileName(UCollisionProfile::BlockAll_ProfileName);
+				TrainCar->RegisterComponent();
+				AddInstanceComponent(TrainCar);
+				GeneratedComponents.Add(TrainCar);
+				RailwayTrainCars.Add(TrainCar);
 			}
 		}
 		UpdateRailwayTrains(0.0f);
@@ -1400,7 +1407,7 @@ bool ASolCityGenerator::SampleRailwayPath(const float Distance, FVector& OutPosi
 
 void ASolCityGenerator::UpdateRailwayTrains(const float DeltaSeconds)
 {
-	if (!RailwayTrainInstances || !RailwayTrainMesh || RailwayLoopLength <= KINDA_SMALL_NUMBER)
+	if (!RailwayTrainMesh || RailwayLoopLength <= KINDA_SMALL_NUMBER)
 	{
 		return;
 	}
@@ -1408,7 +1415,7 @@ void ASolCityGenerator::UpdateRailwayTrains(const float DeltaSeconds)
 	constexpr int32 ConsistCount = 2;
 	constexpr float TrackCenterOffset = 215.0f;
 	const int32 CarCount = FMath::Clamp(RailwayCarsPerConsist, 1, 8);
-	if (RailwayTrainInstanceIndices.Num() != ConsistCount * CarCount)
+	if (RailwayTrainCars.Num() != ConsistCount * CarCount)
 	{
 		return;
 	}
@@ -1447,15 +1454,16 @@ void ASolCityGenerator::UpdateRailwayTrains(const float DeltaSeconds)
 			const FQuat Rotation = FRotationMatrix::MakeFromXZ(TravelTangent, FVector::UpVector).ToQuat();
 			const FVector Translation = Position - Rotation.RotateVector(LocalWheelReference);
 			const int32 FlatIndex = ConsistIndex * CarCount + CarIndex;
-			RailwayTrainInstances->UpdateInstanceTransform(
-				RailwayTrainInstanceIndices[FlatIndex],
-				FTransform(Rotation, Translation, FVector::OneVector),
-				false,
-				false,
-				true);
+			if (UStaticMeshComponent* TrainCar = RailwayTrainCars[FlatIndex])
+			{
+				TrainCar->SetRelativeTransform(
+					FTransform(Rotation, Translation, FVector::OneVector),
+					false,
+					nullptr,
+					ETeleportType::TeleportPhysics);
+			}
 		}
 	}
-	RailwayTrainInstances->MarkRenderStateDirty();
 }
 
 void ASolCityGenerator::GenerateRailwayCrossings()
@@ -1616,7 +1624,7 @@ void ASolCityGenerator::UpdateRailwayCrossingBarriers(const float DeltaSeconds)
 	const float TrainLength = RailwayTrainMesh ? RailwayTrainMesh->GetBoundingBox().GetSize().X : 0.0f;
 	const float CarSpacing = TrainLength + FMath::Max(0.0f, RailwayCarGap);
 	const float TailClearance = (CarCount - 1) * CarSpacing + TrainLength * 0.5f + FMath::Max(0.0f, RailwayBarrierReleaseDistance);
-	const bool bHasActiveTrains = RailwayTrainInstances && RailwayTrainInstanceIndices.Num() == ConsistCount * CarCount;
+	const bool bHasActiveTrains = RailwayTrainCars.Num() == ConsistCount * CarCount;
 	bool bUpdatedAnyBoom = false;
 	bool bUpdatedAnySignal = false;
 

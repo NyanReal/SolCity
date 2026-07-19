@@ -11,6 +11,7 @@ class UProceduralMeshComponent;
 class USceneComponent;
 class USplineComponent;
 class UStaticMesh;
+class UStaticMeshComponent;
 
 UENUM(BlueprintType)
 enum class ESolCityRoadClass : uint8
@@ -413,7 +414,7 @@ private:
 	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> AuthoredBridgeInstances;
 	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> RailwayTrackInstances;
 	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> RailwayBridgeInstances;
-	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> RailwayTrainInstances;
+	TArray<TObjectPtr<UStaticMeshComponent>> RailwayTrainCars;
 	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> LevelCrossingBarrierBaseInstances;
 	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> LevelCrossingBarrierBoomInstances;
 	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> JunctionInstances;
@@ -437,7 +438,6 @@ private:
 	TArray<FRailwaySegment> RailwaySegments;
 	TArray<FRailwayCrossing> RailwayCrossings;
 	TArray<float> RailwayPathCumulativeDistances;
-	TArray<int32> RailwayTrainInstanceIndices;
 	TArray<FVector2D> JunctionCapLocations;
 	FRandomStream Random;
 	float WaterTime = 0.0f;
